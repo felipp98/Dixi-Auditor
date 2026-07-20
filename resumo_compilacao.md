@@ -49,7 +49,7 @@ A estrutura atualizada do projeto está organizada da seguinte forma:
 │   ├── Registro.spec
 │   └── RH_Holerites.spec
 ├── dist/                    # Pasta com o executável final
-│   └── Registro.exe         # Arquivo autônomo para distribuição (73.4 MB)
+│   └── Registro.exe         # Arquivo autônomo para distribuição (76.9 MB, atualizado com a regra de almoço)
 ├── build/                   # Arquivos de compilação temporários (pode ser excluído)
 ├── README.md                # Instruções gerais do projeto
 ├── resumo_compilacao.md     # Este resumo informativo

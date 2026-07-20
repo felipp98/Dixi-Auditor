@@ -70,6 +70,7 @@ class DixiService:
 class PontoEngine:
     JORNADA_SEG = 8 * 3600
     TOLERANCIA_SEG = 600
+    MIN_ALMOCO_SEG = 3600  # 1 hora de almoço (3600s)
 
     @classmethod
     def process_day(cls, day_data: Dict) -> MarcacaoDia:
@@ -84,6 +85,19 @@ class PontoEngine:
             if diff_sec < 0:
                 diff_sec += 24 * 3600  # Suporte para virada de dia/turno noturno
             total_sec += int(diff_sec)
+
+        # Regra de Almoço: Se voltou antes de 1 hora (3600s), desconsidera o tempo antecipado como hora extra,
+        # descontando a diferença para computar no mínimo 1 hora inteira de almoço.
+        if qtd_batidas >= 4:
+            s1 = datetime.strptime(raw_horarios[1], "%H:%M")
+            e2 = datetime.strptime(raw_horarios[2], "%H:%M")
+            intervalo_almoco = (e2 - s1).total_seconds()
+            if intervalo_almoco < 0:
+                intervalo_almoco += 24 * 3600
+            
+            if intervalo_almoco < cls.MIN_ALMOCO_SEG:
+                desconto_antecipacao = cls.MIN_ALMOCO_SEG - intervalo_almoco
+                total_sec -= int(desconto_antecipacao)
 
         dt_obj = datetime.strptime(str(day_data["data"]), "%Y%m%d")
         is_pendencia = (qtd_batidas % 2 != 0) or (qtd_batidas == 2)
