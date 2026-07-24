@@ -13,10 +13,13 @@ O sistema consome a API oficial da Dixi para buscar as batidas de ponto do colab
   - 🟢 **Verde:** Saldo positivo (horas extras).
   - 🔴 **Vermelho:** Saldo negativo (atrasos).
   - 🔴 **Rosa com texto vermelho:** Dias com batidas faltantes (pendências).
+  - 🟢 **Verde Oliva:** Dia em andamento (desconsiderado do saldo acumulado para evitar déficits parciais).
 - **Seletor de Datas Inteligente:** Filtros de data horizontais com lista suspensa nativa em português e ano digitável. O número máximo de dias do seletor se ajusta automaticamente com base no mês e no ano selecionado (incluindo anos bissextos).
+- **Filtro de Dia Atual (Em Andamento):** Checkbox `☑ Ignorar Dia Atual (Em Andamento)` para desconsiderar automaticamente marcações incompletas de hoje no saldo total acumulado e nas pendências da IA.
+- **Auditoria Interativa & Recálculo por IA:** Painel de análise avançada por IA que permite enviar instruções de ajuste em linguagem natural (ex: *"No dia 15/07 considere saída às 18:00 e abone o dia 10/07"*). A IA reanalisa a jornada, recalcula os saldos e aplica os ajustes diretamente na tabela do aplicativo.
 - **Simulação e Edição de Ponto (Modo Auditoria):** Dê um duplo clique em qualquer marcação na tabela para editar ou apagar horários. Clique no botão **"Recalcular Ponto"** para verificar em tempo real como ficará o saldo acumulado antes de exportar.
 - **Regra de Almoço Inteligente:** Computação automática do intervalo de almoço. Se o colaborador retornar antes de 1 hora de intervalo, a antecipação não gera saldo de horas extras (computa no mínimo 1 hora inteira de intervalo). Se retornar após 1 hora, o atraso é contabilizado normalmente na jornada.
-- **Exportação Formatada para Excel:** Gera planilhas Excel organizadas com cabeçalhos de batidas que se adaptam dinamicamente se o funcionário tiver mais que 6 batidas por dia. O Excel gerado já vem com formatação de cores e o saldo geral acumulado.
+- **Exportação Formatada e Auditável para Excel:** Gera planilhas Excel organizadas com cabeçalhos dinâmicos, saldo geral acumulado e cores auditáveis (destaque em amarelo para ajustes por IA e oliva para dias em andamento).
 - **Suporte a Turnos Noturnos:** Reconhece viradas de turno e calcula corretamente marcações que passam da meia-noite.
 
 ---
