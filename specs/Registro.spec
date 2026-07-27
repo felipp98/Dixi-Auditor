@@ -7,7 +7,7 @@ a = Analysis(
     [os.path.join(project_root, 'src', 'Registro.py')],
     pathex=[],
     binaries=[],
-    datas=[(os.path.join(project_root, 'assets', 'images'), 'assets/images')],
+    datas=[(os.path.join(project_root, 'assets'), 'assets')],
     hiddenimports=[],
     hookspath=[],
     hooksconfig={},

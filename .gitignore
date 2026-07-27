@@ -8,6 +8,11 @@ __pycache__/
 # PyInstaller / Build outputs
 build/
 dist/
+**/build/
+**/dist/
+*.zip
+*.db
+*.exe
 
 # Operating System Files
 Thumbs.db

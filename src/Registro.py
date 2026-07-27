@@ -16,6 +16,9 @@ from openpyxl.styles import PatternFill, Font
 import tkinter as tk
 from tkinter import messagebox, ttk, filedialog
 
+from justificativa_service import gerar_pdf_justificativa, formatar_mes_competencia, obter_mes_extenso, enviar_email_smtp
+from autentique_service import enviar_justificativa_autentique
+
 # Configura o Logging para salvar erros em arquivo local
 log_file = os.path.join(os.path.expanduser("~"), "dixi_auditor.log")
 logging.basicConfig(
@@ -42,6 +45,8 @@ class DixiService:
         self.session = requests.Session()
         self.token: Optional[str] = None
         self.user_id: Optional[int] = None
+        self.user_name: Optional[str] = None
+        self.user_cargo: Optional[str] = None
 
     def authenticate(self, user: str, password: str) -> bool:
         try:
@@ -52,7 +57,12 @@ class DixiService:
             data = resp.json()
             if data.get("success"):
                 self.token = data["data"]["token"]
-                self.user_id = data["data"]["usuario"]["funcionario"]["idFuncionario"]
+                user_obj = data["data"].get("usuario", {})
+                func_info = user_obj.get("funcionario", {})
+                self.user_id = func_info.get("idFuncionario")
+                self.user_name = func_info.get("nomeFuncionario") or func_info.get("nome") or user_obj.get("nome") or user
+                self.user_cargo = func_info.get("descricaoCargo") or func_info.get("cargo") or "Colaborador"
+                self.user_email = func_info.get("email") or user_obj.get("email") or user
                 self.session.headers.update({"Authorization": f"bearer {self.token}"})
                 # Guarda as credenciais com segurança no Windows
                 keyring.set_password("DixiPontoApp", "last_user", user)
@@ -283,10 +293,11 @@ class IAAnalistaPonto:
                         "  \"ajustes\": [\n"
                         "    {\"data\": \"DD/MM/YYYY\", \"horarios\": [\"08:00\", \"12:00\", \"13:00\", \"18:00\"], \"obs\": \"Ajustado via IA: saída 18:00\"},\n"
                         "    {\"data\": \"DD/MM/YYYY\", \"abono\": true, \"obs\": \"Abonado via IA\"}\n"
-                        "  ]\n"
+                        "  ],\n"
+                        "  \"enviar_justificativa\": true\n"
                         "}\n"
                         "```\n"
-                        "Ajuste apenas os dias citados na instrução do usuário. Se não houver edições diretas na tabela, não inclua o bloco JSON."
+                        "Nota: Inclua \"enviar_justificativa\": true apenas se o usuário solicitar enviar, gerar ou encaminhar a justificativa/folha para o RH/Autentique."
                     )
                 payload = {
                     "model": model,
@@ -294,6 +305,7 @@ class IAAnalistaPonto:
                     "temperature": 0.3
                 }
                 resp = requests.post(endpoint, json=payload, headers=headers, timeout=20)
+                auto_enviar = False
                 if resp.status_code == 200:
                     res_json = resp.json()
                     content = res_json["choices"][0]["message"]["content"]
@@ -302,10 +314,16 @@ class IAAnalistaPonto:
                         try:
                             data_json = json.loads(json_match.group(1))
                             parsed_ajustes = data_json.get("ajustes", [])
+                            auto_enviar = bool(data_json.get("enviar_justificativa", False))
                             content = re.sub(r'```json\s*(\{.*?\})\s*```', '', content).strip()
                         except Exception as je:
                             logging.error(f"Erro ao parsear JSON de ajustes: {je}")
-                    return content, parsed_ajustes
+                    
+                    # Checagem por palavra-chave se o usuário pediu envio
+                    if instrucoes_usuario and any(k in instrucoes_usuario.lower() for k in ["enviar", "envie", "gerar", "justificativa", "rh", "autentique"]):
+                        auto_enviar = True
+
+                    return content, parsed_ajustes, auto_enviar
             except Exception as e:
                 logging.error(f"Erro na API de IA: {e}")
 
@@ -347,10 +365,11 @@ class IAAnalistaPonto:
         if len(dias_extras) > 0:
             fallback += f"🟢 Horas Extras: {len(dias_extras)} dia(s) fecharam com saldo positivo.\n"
 
-        if not token:
-            fallback += "\n💡 Dica: Configure sua ANTHROPIC_AUTH_TOKEN ou chave do OpenRouter para que a IA recalcule com inteligência em linguagem natural."
-            
-        return fallback, parsed_ajustes
+        auto_enviar = False
+        if instrucoes_usuario and any(k in instrucoes_usuario.lower() for k in ["enviar", "envie", "gerar", "justificativa", "rh", "autentique"]):
+            auto_enviar = True
+
+        return fallback, parsed_ajustes, auto_enviar
 
 # --- SELETOR DE DATAS CUSTOMIZADO ---
 class DateSelector(ttk.Frame):
@@ -605,8 +624,14 @@ class AppPonto(tk.Tk):
                              foreground=self.text_color, 
                              font=("Segoe UI", 10, "bold"))
         
-        filter_frame = ttk.Frame(self, padding=15)
+        filter_frame = ttk.Frame(self, padding=(15, 10))
         filter_frame.pack(fill="x", side="top")
+
+        row_filters = ttk.Frame(filter_frame)
+        row_filters.pack(fill="x", side="top", pady=(0, 6))
+
+        row_actions = ttk.Frame(filter_frame)
+        row_actions.pack(fill="x", side="top")
         
         now = datetime.now()
         current_year = str(now.year)
@@ -614,52 +639,58 @@ class AppPonto(tk.Tk):
         current_day = f"{now.day:02d}"
 
         # Data Início
-        lbl_i = ttk.Label(filter_frame, text="Data Início:", font=("Segoe UI", 10, "bold"))
+        lbl_i = ttk.Label(row_filters, text="Data Início:", font=("Segoe UI", 10, "bold"))
         lbl_i.pack(side="left", padx=(0, 5))
-        self.cal_i = DateSelector(filter_frame, default_day="01", default_month=current_month, default_year=current_year)
+        self.cal_i = DateSelector(row_filters, default_day="01", default_month=current_month, default_year=current_year)
         self.cal_i.pack(side="left", padx=(0, 15))
 
         # Data Fim
-        lbl_f = ttk.Label(filter_frame, text="Data Fim:", font=("Segoe UI", 10, "bold"))
+        lbl_f = ttk.Label(row_filters, text="Data Fim:", font=("Segoe UI", 10, "bold"))
         lbl_f.pack(side="left", padx=(0, 5))
-        self.cal_f = DateSelector(filter_frame, default_day=current_day, default_month=current_month, default_year=current_year)
+        self.cal_f = DateSelector(row_filters, default_day=current_day, default_month=current_month, default_year=current_year)
         self.cal_f.pack(side="left", padx=(0, 15))
 
         # Checkbox Ignorar Dia Atual (Em Andamento)
         self.var_ignore_today = tk.BooleanVar(value=True)
         self.chk_ignore_today = ttk.Checkbutton(
-            filter_frame,
-            text="☑ Ignorar Dia Atual (Em Andamento)",
+            row_filters,
+            text="Ignorar Dia Atual (Em Andamento)",
             variable=self.var_ignore_today,
             command=self._on_toggle_ignore_today
         )
         self.chk_ignore_today.pack(side="left", padx=(0, 15))
 
-        # Botões de Ação
-        self.btn_buscar = ttk.Button(filter_frame, text="Visualizar Ponto", command=self._fetch_and_display)
-        self.btn_buscar.pack(side="left", padx=(0, 8))
+        # Botões de Ação na Linha 2
+        self.btn_buscar = ttk.Button(row_actions, text="Visualizar Ponto", command=self._fetch_and_display)
+        self.btn_buscar.pack(side="left", padx=(0, 6))
 
-        self.btn_recalc = ttk.Button(filter_frame, text="Recalcular Ponto", command=self._recalculate_tree_totals, state="disabled")
-        self.btn_recalc.pack(side="left", padx=(0, 8))
+        self.btn_recalc = ttk.Button(row_actions, text="Recalcular Ponto", command=self._recalculate_tree_totals, state="disabled")
+        self.btn_recalc.pack(side="left", padx=(0, 6))
 
-        self.btn_export = ttk.Button(filter_frame, text="Exportar Excel", command=self._export_excel, state="disabled")
-        self.btn_export.pack(side="left", padx=(0, 8))
+        self.btn_export = ttk.Button(row_actions, text="Exportar Excel", command=self._export_excel, state="disabled")
+        self.btn_export.pack(side="left", padx=(0, 6))
+
+        ttk.Separator(row_actions, orient="vertical").pack(side="left", fill="y", padx=6, pady=2)
 
         # Botão Análise por IA
-        self.btn_ai = ttk.Button(filter_frame, text="🤖 Análise por IA", command=self._show_ai_analysis, state="disabled")
-        self.btn_ai.pack(side="left", padx=(0, 8))
+        self.btn_ai = ttk.Button(row_actions, text="🤖 Análise por IA", command=self._show_ai_analysis, state="disabled")
+        self.btn_ai.pack(side="left", padx=(0, 6))
 
         # Botão Configuração da Chave IA
-        self.btn_key = ttk.Button(filter_frame, text="🔑 Chave IA", command=self._config_ai_key)
-        self.btn_key.pack(side="left")
+        self.btn_key = ttk.Button(row_actions, text="🔑 Chave IA", command=self._config_ai_key)
+        self.btn_key.pack(side="left", padx=(0, 6))
+
+        # Botão Justificativa RH via Autentique
+        self.btn_justificativa = ttk.Button(row_actions, text="✍️ Enviar Justificativa RH", command=self._abrir_modal_justificativa, state="disabled")
+        self.btn_justificativa.pack(side="left")
 
         # Frame Principal da Tabela
         table_frame = ttk.Frame(self, padding=15)
         table_frame.pack(fill="both", expand=True, side="top")
         
-        self.cols = ["Data", "E1", "S1", "E2", "S2", "E3", "S3", "Total", "Saldo", "Obs"]
+        self.cols = ["Sel", "Data", "E1", "S1", "E2", "S2", "E3", "S3", "Total", "Saldo", "Obs"]
         
-        self.tree = ttk.Treeview(table_frame, columns=self.cols, show="headings", selectmode="browse")
+        self.tree = ttk.Treeview(table_frame, columns=self.cols, show="headings", selectmode="extended")
         
         vsb = ttk.Scrollbar(table_frame, orient="vertical", command=self.tree.yview)
         hsb = ttk.Scrollbar(table_frame, orient="horizontal", command=self.tree.xview)
@@ -673,12 +704,47 @@ class AppPonto(tk.Tk):
         table_frame.grid_columnconfigure(0, weight=1)
 
         column_widths = {
-            "Data": 100, "E1": 65, "S1": 65, "E2": 65, "S2": 65, "E3": 65, "S3": 65,
-            "Total": 80, "Saldo": 80, "Obs": 140
+            "Sel": 45, "Data": 105, "E1": 70, "S1": 70, "E2": 70, "S2": 70, "E3": 70, "S3": 70,
+            "Total": 85, "Saldo": 85, "Obs": 180
         }
+        self.var_main_sel_all = True
+
+        def _toggle_sel_all_main():
+            self.var_main_sel_all = not self.var_main_sel_all
+            mark = "[☑]" if self.var_main_sel_all else "[☐]"
+            self.tree.heading("Sel", text=f"Sel {mark}")
+            for child in self.tree.get_children():
+                vals = list(self.tree.item(child, "values"))
+                if vals:
+                    vals[0] = mark
+                    self.tree.item(child, values=vals)
+
         for c in self.cols:
-            self.tree.heading(c, text=c, anchor="center")
-            self.tree.column(c, width=column_widths.get(c, 80), anchor="center")
+            if c == "Sel":
+                self.tree.heading(c, text="Sel [☑]", command=_toggle_sel_all_main, anchor="center")
+            else:
+                self.tree.heading(c, text=c, anchor="center")
+            self.tree.column(c, width=column_widths.get(c, 80), minwidth=40 if c == "Sel" else 50, stretch=False, anchor="center")
+
+        def _on_tree_click(event):
+            region = self.tree.identify_region(event.x, event.y)
+            if region == "cell":
+                col = self.tree.identify_column(event.x)
+                if col == "#1":  # Coluna 'Sel'
+                    item = self.tree.identify_row(event.y)
+                    if item:
+                        vals = list(self.tree.item(item, "values"))
+                        if vals:
+                            vals[0] = "[☐]" if vals[0] == "[☑]" else "[☑]"
+                            self.tree.item(item, values=vals)
+
+        self.tree.bind("<Button-1>", _on_tree_click)
+
+        def _on_tree_hscroll(event):
+            if self.tree.winfo_exists():
+                self.tree.xview_scroll(int(-1 * (event.delta / 120)), "units")
+
+        self.tree.bind("<Shift-MouseWheel>", _on_tree_hscroll)
 
         self.tree.tag_configure("positive", foreground=self.primary_dark, font=("Segoe UI", 10, "bold"))
         self.tree.tag_configure("negative", foreground=self.danger_color, font=("Segoe UI", 10, "bold"))
@@ -706,7 +772,7 @@ class AppPonto(tk.Tk):
         col_idx = int(column[1:]) - 1
         col_name = self.cols[col_idx]
         
-        if col_name in ["Data", "Total", "Saldo", "Obs"]:
+        if col_name in ["Sel", "Data", "Total", "Saldo", "Obs"]:
             return
             
         x, y, width, height = self.tree.bbox(item, column)
@@ -783,24 +849,35 @@ class AppPonto(tk.Tk):
         if max_cols % 2 != 0:
             max_cols += 1
 
-        cols = ["Data"]
+        cols = ["Sel", "Data"]
         for i in range(1, (max_cols // 2) + 1):
             cols.extend([f"E{i}", f"S{i}"])
         cols.extend(["Total", "Saldo", "Obs"])
         
-        self.cols = cols
-        self.tree["columns"] = cols
-        
+        self.var_main_sel_all = True
+
+        def _toggle_sel_all_main():
+            self.var_main_sel_all = not getattr(self, "var_main_sel_all", True)
+            mark = "[☑]" if self.var_main_sel_all else "[☐]"
+            self.tree.heading("Sel", text=f"Sel {mark}")
+            for child in self.tree.get_children():
+                vals = list(self.tree.item(child, "values"))
+                if vals:
+                    vals[0] = mark
+                    self.tree.item(child, values=vals)
+
         for c in cols:
-            self.tree.heading(c, text=c, anchor="center")
-            if c == "Data":
-                self.tree.column(c, width=100, minwidth=80, anchor="center")
+            if c == "Sel":
+                self.tree.heading(c, text="Sel [☑]", command=_toggle_sel_all_main, anchor="center")
+                self.tree.column(c, width=45, minwidth=40, stretch=False, anchor="center")
+            elif c == "Data":
+                self.tree.column(c, width=105, minwidth=80, stretch=False, anchor="center")
             elif c in ["Total", "Saldo"]:
-                self.tree.column(c, width=80, minwidth=70, anchor="center")
+                self.tree.column(c, width=85, minwidth=70, stretch=False, anchor="center")
             elif c == "Obs":
-                self.tree.column(c, width=140, minwidth=100, anchor="center")
+                self.tree.column(c, width=180, minwidth=100, stretch=False, anchor="center")
             else:
-                self.tree.column(c, width=65, minwidth=50, anchor="center")
+                self.tree.column(c, width=70, minwidth=50, stretch=False, anchor="center")
 
         today_str = datetime.now().strftime("%d/%m/%Y")
         ignore_today = self.var_ignore_today.get()
@@ -825,13 +902,16 @@ class AppPonto(tk.Tk):
                 elif m.saldo_segundos < 0:
                     tag = "negative"
                 
-            row_vals = [m.data_formatada] + punches + [total_str, saldo_str, obs_str]
+            tem_ajuste = bool(obs_str or any([p for p in punches if p]))
+            sel_str = "[☑]" if tem_ajuste else "[☐]"
+            row_vals = [sel_str, m.data_formatada] + punches + [total_str, saldo_str, obs_str]
             self.tree.insert("", "end", values=row_vals, tags=(tag,))
             
         if data:
             self.btn_export.config(state="normal")
             self.btn_recalc.config(state="normal")
             self.btn_ai.config(state="normal")
+            self.btn_justificativa.config(state="normal")
             
             total_saldo_seg = sum([
                 0 if (m.data_formatada == today_str and ignore_today) else m.saldo_segundos 
@@ -846,66 +926,77 @@ class AppPonto(tk.Tk):
             self.lbl_status.config(text=status_text, foreground=self.text_color)
 
     def _recalculate_tree_totals(self):
-        total_saldo_seg = 0
-        total_dias = 0
-        today_str = datetime.now().strftime("%d/%m/%Y")
-        ignore_today = self.var_ignore_today.get()
-        
-        num_punch_cols = len(self.cols) - 4
-        new_processed = []
-        
-        for item in self.tree.get_children():
-            values = list(self.tree.item(item, "values"))
+        try:
+            total_saldo_seg = 0
+            total_dias = 0
+            today_str = datetime.now().strftime("%d/%m/%Y")
+            ignore_today = self.var_ignore_today.get()
             
-            data_formatada = values[0]
-            dt_obj = datetime.strptime(data_formatada, "%d/%m/%Y")
-            data_id = dt_obj.strftime("%Y%m%d")
+            has_sel = ("Sel" in self.cols)
+            offset = 1 if has_sel else 0
+            num_punch_cols = len(self.cols) - (5 if has_sel else 4)
+            new_processed = []
             
-            punches = [values[i] for i in range(1, 1 + num_punch_cols) if values[i].strip()]
-            
-            day_data = {
-                "data": data_id,
-                "marcacoes": [{"hora": h} for h in punches]
-            }
-            
-            m_dia = PontoEngine.process_day(day_data)
-            new_processed.append(m_dia)
-            
-            is_today = (data_formatada == today_str) and ignore_today
-            total_str = self.exporter.format_time(m_dia.segundos_trabalhados)
-            
-            if is_today:
-                saldo_str = "00:00"
-                obs_str = m_dia.obs if m_dia.obs else "EM ANDAMENTO"
-                tag = "in_progress"
-            else:
-                saldo_str = self.exporter.format_time(m_dia.saldo_segundos, True)
-                obs_str = m_dia.obs if m_dia.obs else ("FALTA BATIDA" if m_dia.is_pendencia else "")
-                tag = "normal"
-                if m_dia.is_pendencia:
-                    tag = "missing"
-                elif m_dia.saldo_segundos > 0:
-                    tag = "positive"
-                elif m_dia.saldo_segundos < 0:
-                    tag = "negative"
+            for item in self.tree.get_children():
+                values = list(self.tree.item(item, "values"))
+                if not values:
+                    continue
                 
-            padded_punches = (punches + [""] * num_punch_cols)[:num_punch_cols]
-            new_values = [data_formatada] + padded_punches + [total_str, saldo_str, obs_str]
-            self.tree.item(item, values=new_values, tags=(tag,))
-            
-            if len(punches) > 0 and not is_today:
-                total_saldo_seg += m_dia.saldo_segundos
-                total_dias += 1
+                sel_val = values[0] if has_sel else "[☑]"
+                data_formatada = str(values[offset])
+                try:
+                    dt_obj = datetime.strptime(data_formatada, "%d/%m/%Y")
+                    data_id = dt_obj.strftime("%Y%m%d")
+                except Exception:
+                    continue
                 
-        self.processed_data = new_processed
-        
-        saldo_acumulado = self.exporter.format_time(total_saldo_seg, True)
-        status_text = f"Dias recalculados: {total_dias} | Saldo Acumulado: {saldo_acumulado}"
-        if ignore_today and any(m.data_formatada == today_str for m in new_processed):
-            status_text += " (Dia atual desconsiderado)"
-        self.lbl_status.config(text=status_text, foreground=self.text_color)
-        
-        messagebox.showinfo("Recalculado", "Os cálculos diários e o saldo acumulado foram atualizados com sucesso!")
+                punches = [str(values[i]).strip() for i in range(1 + offset, 1 + offset + num_punch_cols) if i < len(values) and str(values[i]).strip()]
+                
+                day_data = {
+                    "data": data_id,
+                    "marcacoes": [{"hora": h} for h in punches]
+                }
+                
+                m_dia = PontoEngine.process_day(day_data)
+                new_processed.append(m_dia)
+                
+                is_today = (data_formatada == today_str) and ignore_today
+                total_str = self.exporter.format_time(m_dia.segundos_trabalhados)
+                
+                if is_today:
+                    saldo_str = "00:00"
+                    obs_str = m_dia.obs if m_dia.obs else "EM ANDAMENTO"
+                    tag = "in_progress"
+                else:
+                    saldo_str = self.exporter.format_time(m_dia.saldo_segundos, True)
+                    obs_str = m_dia.obs if m_dia.obs else ("FALTA BATIDA" if m_dia.is_pendencia else "")
+                    tag = "normal"
+                    if m_dia.is_pendencia:
+                        tag = "missing"
+                    elif m_dia.saldo_segundos > 0:
+                        tag = "positive"
+                    elif m_dia.saldo_segundos < 0:
+                        tag = "negative"
+                    
+                padded_punches = (punches + [""] * num_punch_cols)[:num_punch_cols]
+                new_values = ([sel_val] if has_sel else []) + [data_formatada] + padded_punches + [total_str, saldo_str, obs_str]
+                self.tree.item(item, values=new_values, tags=(tag,))
+                
+                if len(punches) > 0 and not is_today:
+                    total_saldo_seg += m_dia.saldo_segundos
+                    total_dias += 1
+                    
+            self.processed_data = new_processed
+            
+            saldo_acumulado = self.exporter.format_time(total_saldo_seg, True)
+            status_text = f"🔄 Ponto Recalculado! Dias: {total_dias} | Saldo Acumulado: {saldo_acumulado}"
+            if ignore_today and any(m.data_formatada == today_str for m in new_processed):
+                status_text += " (Dia atual desconsiderado)"
+            self.lbl_status.config(text=status_text, foreground=self.primary_dark)
+            messagebox.showinfo("Recálculo Concluído", f"Ponto recalculado com sucesso para {total_dias} dias!\n\nSaldo Acumulado no Período: {saldo_acumulado}", parent=self)
+        except Exception as ex:
+            logging.error(f"Erro ao recalcular ponto: {ex}")
+            messagebox.showerror("Erro de Recálculo", f"Falha ao recalcular o ponto:\n{ex}", parent=self)
 
     def _export_excel(self):
         if not self.processed_data:
@@ -1130,7 +1221,7 @@ class AppPonto(tk.Tk):
                 txt.config(state="disabled")
 
             def run_thread():
-                res_text, ajustes = IAAnalistaPonto.analisar_ponto(
+                res_text, ajustes, auto_enviar = IAAnalistaPonto.analisar_ponto(
                     self.processed_data, 
                     instrucoes_usuario=custom_prompt, 
                     ignore_today=self.var_ignore_today.get()
@@ -1156,6 +1247,10 @@ class AppPonto(tk.Tk):
                         lbl_status.config(text="✅ Análise recalculada com sucesso.")
                         
                     ent_instrucao.delete(0, "end")
+
+                    if auto_enviar:
+                        lbl_status.config(text="🚀 IA abrindo formulário de Justificativa para o RH...")
+                        self.after(600, self._abrir_modal_justificativa)
                 self.after(0, update_ui)
 
             threading.Thread(target=run_thread, daemon=True).start()
@@ -1173,5 +1268,663 @@ class AppPonto(tk.Tk):
         # Executa análise inicial sem instrução prévia
         execute_analysis(None)
 
+    def _abrir_modal_justificativa(self):
+        top = tk.Toplevel(self)
+        top.title("✍️ Enviar Justificativa de Ponto (Autentique / E-mail)")
+        top.geometry("720x800")
+        top.minsize(680, 600)
+        top.transient(self)
+        top.grab_set()
+
+        try:
+            def safe_keyring_get(key, default=""):
+                try:
+                    return keyring.get_password("DixiPontoApp", key) or default
+                except Exception as ex_k:
+                    logging.error(f"Erro no keyring get {key}: {ex_k}")
+                    return default
+
+            saved_token = safe_keyring_get("autentique_token")
+            saved_gestor_email = safe_keyring_get("gestor_email")
+            saved_rh_email = safe_keyring_get("rh_email")
+            saved_colab_email = safe_keyring_get("colaborador_email")
+            saved_gestor_nome = safe_keyring_get("gestor_nome", "Gestor Imediato")
+            saved_rh_nome = safe_keyring_get("rh_nome", "Recursos Humanos")
+
+            dixi_srv = getattr(self, "service", None) or getattr(self, "dixi", None)
+            dixi_user_email = getattr(dixi_srv, "user_email", "") if dixi_srv else ""
+            colab_email_default = dixi_user_email or saved_colab_email
+
+            colab_nome_default = getattr(dixi_srv, "user_name", "") if dixi_srv else ""
+            colab_nome_default = colab_nome_default or "Colaborador"
+
+            colab_cargo_default = ""
+
+            try:
+                dt_ini = self.cal_i.get_date()
+                mes_comp_default = obter_mes_extenso(dt_ini.month)
+            except Exception:
+                mes_comp_default = obter_mes_extenso(datetime.now().month)
+
+            data_solic_default = datetime.now().strftime("%d/%m/%Y")
+
+            # Rodapé Fixo (Botões de Ação)
+            bottom_bar = ttk.Frame(top, padding=(15, 10))
+            bottom_bar.pack(side="bottom", fill="x")
+
+            lbl_status = ttk.Label(bottom_bar, text="", font=("Segoe UI", 9, "bold"))
+            lbl_status.pack(anchor="w", pady=(0, 4))
+
+            btn_frame = ttk.Frame(bottom_bar)
+            btn_frame.pack(fill="x")
+
+            # Container Principal Rolável (Formulário)
+            main_container = ttk.Frame(top)
+            main_container.pack(side="top", fill="both", expand=True)
+
+            canvas_modal = tk.Canvas(main_container, highlightthickness=0)
+            vsb_modal = ttk.Scrollbar(main_container, orient="vertical", command=canvas_modal.yview)
+            frame = ttk.Frame(canvas_modal, padding=15)
+
+            canvas_modal_win = canvas_modal.create_window((0, 0), window=frame, anchor="nw")
+            canvas_modal.configure(yscrollcommand=vsb_modal.set)
+
+            canvas_modal.bind("<Configure>", lambda e: canvas_modal.itemconfig(canvas_modal_win, width=e.width))
+            frame.bind("<Configure>", lambda e: canvas_modal.configure(scrollregion=canvas_modal.bbox("all")))
+
+            canvas_modal.pack(side="left", fill="both", expand=True)
+            vsb_modal.pack(side="right", fill="y")
+
+            lbl_top = ttk.Label(frame, text="Formulário de Justificativa de Ponto para o RH", font=("Segoe UI", 11, "bold"))
+            lbl_top.pack(anchor="w", pady=(0, 10))
+
+            # Seção 1: Dados do Colaborador
+            sec_colab = ttk.LabelFrame(frame, text=" 👤 Dados do Colaborador ", padding=10)
+            sec_colab.pack(fill="x", pady=(0, 8))
+            sec_colab.columnconfigure(1, weight=1)
+            sec_colab.columnconfigure(3, weight=1)
+
+            ttk.Label(sec_colab, text="Colaborador:").grid(row=0, column=0, sticky="w", pady=3)
+            ent_colab = ttk.Entry(sec_colab, width=28)
+            ent_colab.insert(0, colab_nome_default)
+            ent_colab.grid(row=0, column=1, sticky="ew", pady=3, padx=(5, 15))
+
+            ttk.Label(sec_colab, text="Função / Cargo:").grid(row=0, column=2, sticky="w", pady=3)
+            ent_cargo = ttk.Entry(sec_colab, width=24)
+            ent_cargo.insert(0, colab_cargo_default)
+            ent_cargo.grid(row=0, column=3, sticky="ew", pady=3, padx=(5, 0))
+
+            ttk.Label(sec_colab, text="Mês Competência:").grid(row=1, column=0, sticky="w", pady=3)
+            ent_mes = ttk.Entry(sec_colab, width=28)
+            ent_mes.insert(0, mes_comp_default)
+            ent_mes.grid(row=1, column=1, sticky="ew", pady=3, padx=(5, 15))
+
+            ttk.Label(sec_colab, text="Data Solicitação:").grid(row=1, column=2, sticky="w", pady=3)
+            ent_data_solic = ttk.Entry(sec_colab, width=24)
+            ent_data_solic.insert(0, data_solic_default)
+            ent_data_solic.grid(row=1, column=3, sticky="ew", pady=3, padx=(5, 0))
+
+            ttk.Label(sec_colab, text="E-mail Colaborador:").grid(row=2, column=0, sticky="w", pady=3)
+            ent_colab_email = ttk.Entry(sec_colab, width=28)
+            ent_colab_email.insert(0, colab_email_default)
+            ent_colab_email.grid(row=2, column=1, sticky="ew", pady=3, padx=(5, 15))
+
+            ttk.Label(sec_colab, text="Papel no Documento:").grid(row=2, column=2, sticky="w", pady=3)
+            combo_colab_role = ttk.Combobox(sec_colab, values=["Assinar", "Testemunha", "Aprovar"], state="readonly", width=18)
+            combo_colab_role.set("Assinar")
+            combo_colab_role.grid(row=2, column=3, sticky="ew", pady=3, padx=(5, 0))
+
+            # Seção 2: Aprovadores e Destinatários
+            sec_aprov = ttk.LabelFrame(frame, text=" 👔 Aprovadores (Gestão / RH) ", padding=10)
+            sec_aprov.pack(fill="x", pady=(0, 8))
+            sec_aprov.columnconfigure(1, weight=1)
+            sec_aprov.columnconfigure(3, weight=1)
+
+            ttk.Label(sec_aprov, text="Nome do Gestor:").grid(row=0, column=0, sticky="w", pady=3)
+            ent_gestor_nome = ttk.Entry(sec_aprov, width=28)
+            ent_gestor_nome.insert(0, saved_gestor_nome)
+            ent_gestor_nome.grid(row=0, column=1, sticky="ew", pady=3, padx=(5, 15))
+
+            ttk.Label(sec_aprov, text="E-mail do Gestor:").grid(row=0, column=2, sticky="w", pady=3)
+            ent_gestor_email = ttk.Entry(sec_aprov, width=24)
+            ent_gestor_email.insert(0, saved_gestor_email)
+            ent_gestor_email.grid(row=0, column=3, sticky="ew", pady=3, padx=(5, 0))
+
+            ttk.Label(sec_aprov, text="Papel do Gestor:").grid(row=1, column=0, sticky="w", pady=3)
+            combo_gestor_role = ttk.Combobox(sec_aprov, values=["Assinar", "Testemunha", "Aprovar"], state="readonly", width=18)
+            combo_gestor_role.set("Assinar")
+            combo_gestor_role.grid(row=1, column=1, sticky="ew", pady=3, padx=(5, 15))
+
+            ttk.Label(sec_aprov, text="Nome do RH:").grid(row=2, column=0, sticky="w", pady=3)
+            ent_rh_nome = ttk.Entry(sec_aprov, width=28)
+            ent_rh_nome.insert(0, saved_rh_nome)
+            ent_rh_nome.grid(row=2, column=1, sticky="ew", pady=3, padx=(5, 15))
+
+            ttk.Label(sec_aprov, text="E-mail do RH:").grid(row=2, column=2, sticky="w", pady=3)
+            ent_rh_email = ttk.Entry(sec_aprov, width=24)
+            ent_rh_email.insert(0, saved_rh_email)
+            ent_rh_email.grid(row=2, column=3, sticky="ew", pady=3, padx=(5, 0))
+
+            ttk.Label(sec_aprov, text="Papel do RH:").grid(row=3, column=0, sticky="w", pady=3)
+            combo_rh_role = ttk.Combobox(sec_aprov, values=["Assinar", "Testemunha", "Aprovar"], state="readonly", width=18)
+            combo_rh_role.set("Assinar")
+            combo_rh_role.grid(row=3, column=1, sticky="ew", pady=3, padx=(5, 15))
+
+            ttk.Label(sec_aprov, text="Token Autentique:").grid(row=3, column=2, sticky="w", pady=3)
+            ent_token = ttk.Entry(sec_aprov, width=24, show="*")
+            ent_token.insert(0, saved_token)
+            ent_token.grid(row=3, column=3, sticky="ew", pady=3, padx=(5, 0))
+
+            # Seção 2.5: Signatários Adicionais / Testemunhas Extras
+            sec_extras = ttk.LabelFrame(frame, text=" 👥 Signatários Adicionais / Testemunhas Extras ", padding=8)
+            sec_extras.pack(fill="x", pady=(0, 8))
+
+            extras_container = ttk.Frame(sec_extras)
+            extras_container.pack(fill="x", expand=True)
+
+            lista_widgets_extras = []
+
+            def adicionar_signatario_extra(nome="", email="", papel="Assinar"):
+                row_ex = ttk.Frame(extras_container)
+                row_ex.pack(fill="x", pady=2)
+
+                ttk.Label(row_ex, text="Nome:").pack(side="left", padx=(0, 2))
+                ent_ex_nome = ttk.Entry(row_ex, width=18)
+                ent_ex_nome.insert(0, nome)
+                ent_ex_nome.pack(side="left", padx=(0, 8))
+
+                ttk.Label(row_ex, text="E-mail:").pack(side="left", padx=(0, 2))
+                ent_ex_email = ttk.Entry(row_ex, width=22)
+                ent_ex_email.insert(0, email)
+                ent_ex_email.pack(side="left", padx=(0, 8))
+
+                ttk.Label(row_ex, text="Papel:").pack(side="left", padx=(0, 2))
+                cb_ex_papel = ttk.Combobox(row_ex, values=["Assinar", "Testemunha", "Aprovar"], state="readonly", width=12)
+                cb_ex_papel.set(papel)
+                cb_ex_papel.pack(side="left", padx=(0, 8))
+
+                item_dict = {"frame": row_ex, "nome": ent_ex_nome, "email": ent_ex_email, "papel": cb_ex_papel}
+
+                def remover():
+                    row_ex.destroy()
+                    if item_dict in lista_widgets_extras:
+                        lista_widgets_extras.remove(item_dict)
+
+                btn_del = ttk.Button(row_ex, text="❌", width=3, command=remover)
+                btn_del.pack(side="left")
+
+                lista_widgets_extras.append(item_dict)
+
+            btn_add_extra = ttk.Button(sec_extras, text="➕ Adicionar Signatário Extra", command=lambda: adicionar_signatario_extra())
+            btn_add_extra.pack(anchor="w", pady=(2, 0))
+
+            # Seletor com checkboxes dos dias para o RH
+            sel_hdr_frame = ttk.Frame(frame)
+            sel_hdr_frame.pack(fill="x", pady=(6, 4))
+
+            ttk.Label(sel_hdr_frame, text="📅 Selecione os dias com ajuste para a Justificativa:", font=("Segoe UI", 9, "bold")).pack(side="left")
+            lbl_count = ttk.Label(sel_hdr_frame, text="(0 dias)", font=("Segoe UI", 9, "bold"), foreground="#15803d")
+            lbl_count.pack(side="left", padx=(6, 0))
+
+            var_master_select = tk.BooleanVar(value=False)
+
+            def atualizar_contador():
+                qtd = sum(1 for d in lista_dias_vars if d["var"].get())
+                lbl_count.config(text=f"({qtd} {'dia selecionado' if qtd == 1 else 'dias selecionados'})")
+
+            def toggle_master_select():
+                val = var_master_select.get()
+                for d in lista_dias_vars:
+                    d["var"].set(val)
+                atualizar_contador()
+
+            chk_master = ttk.Checkbutton(sel_hdr_frame, text="Selecionar / Desmarcar Todos", variable=var_master_select, command=toggle_master_select)
+            chk_master.pack(side="right")
+
+            chk_container = ttk.Frame(frame)
+            chk_container.pack(fill="both", expand=True, pady=(0, 8))
+
+            canvas_chk = tk.Canvas(chk_container, height=160, bg="#ffffff", highlightthickness=1, highlightbackground="#a5d6a7")
+            vsb_chk = ttk.Scrollbar(chk_container, orient="vertical", command=canvas_chk.yview)
+            scroll_frame = ttk.Frame(canvas_chk)
+
+            canvas_window = canvas_chk.create_window((0, 0), window=scroll_frame, anchor="nw")
+
+            scroll_frame.bind(
+                "<Configure>",
+                lambda e: canvas_chk.configure(scrollregion=canvas_chk.bbox("all"))
+            )
+            canvas_chk.bind(
+                "<Configure>",
+                lambda e: canvas_chk.itemconfig(canvas_window, width=e.width)
+            )
+
+            canvas_chk.configure(yscrollcommand=vsb_chk.set)
+
+            # Scroll da roda do mouse (MouseWheel)
+            def _on_mousewheel(event):
+                if canvas_chk.winfo_exists():
+                    canvas_chk.yview_scroll(int(-1 * (event.delta / 120)), "units")
+
+            def _bind_mw(e):
+                canvas_chk.bind_all("<MouseWheel>", _on_mousewheel)
+
+            def _unbind_mw(e):
+                canvas_chk.unbind_all("<MouseWheel>")
+
+            canvas_chk.bind("<Enter>", _bind_mw)
+            canvas_chk.bind("<Leave>", _unbind_mw)
+
+            def _on_modal_close():
+                try:
+                    canvas_chk.unbind_all("<MouseWheel>")
+                except Exception:
+                    pass
+                top.destroy()
+
+            top.protocol("WM_DELETE_WINDOW", _on_modal_close)
+
+            canvas_chk.pack(side="left", fill="both", expand=True)
+            vsb_chk.pack(side="right", fill="y")
+
+            dias_semana_map = ["SEGUNDA-FEIRA", "TERÇA-FEIRA", "QUARTA-FEIRA", "QUINTA-FEIRA", "SEXTA-FEIRA", "SÁBADO / DOMINGO"]
+            lista_dias_vars = []
+
+            checked_items = [c for c in self.tree.get_children() if self.tree.item(c)["values"] and str(self.tree.item(c)["values"][0]) == "[☑]"]
+            selected_items = list(set(self.tree.selection()))
+            target_items = checked_items if checked_items else selected_items
+            has_user_filter = len(target_items) > 0
+
+            for child in self.tree.get_children():
+                if has_user_filter and child not in target_items:
+                    continue
+
+                vals = self.tree.item(child)["values"]
+                if not vals:
+                    continue
+
+                if str(vals[0]) in ["[☑]", "[☐]"]:
+                    dt = str(vals[1])
+                    punches = vals[2:-3] if len(vals) >= 5 else []
+                    obs = str(vals[-1]) if len(vals) > 0 else ""
+                else:
+                    dt = str(vals[0])
+                    punches = vals[1:-3] if len(vals) >= 4 else []
+                    obs = str(vals[-1]) if len(vals) > 0 else ""
+
+                try:
+                    dt_obj = datetime.strptime(dt, "%d/%m/%Y")
+                    w = dt_obj.weekday()
+                    dia_sem = dias_semana_map[w] if w < 5 else "SÁBADO / DOMINGO"
+                except Exception:
+                    dia_sem = "DIA DE TRABALHO"
+
+                e1 = punches[0] if len(punches) > 0 else ""
+                s1 = punches[1] if len(punches) > 1 else ""
+                e2 = punches[2] if len(punches) > 2 else ""
+                s2 = punches[3] if len(punches) > 3 else ""
+                e3 = punches[4] if len(punches) > 4 else ""
+                s3 = punches[5] if len(punches) > 5 else ""
+
+                tem_ajuste = bool(obs or any([e1, s1, e2, s2, e3, s3]))
+
+                v_chk = tk.BooleanVar(value=tem_ajuste)
+
+                row_item = ttk.Frame(scroll_frame)
+                row_item.pack(fill="x", expand=True, padx=6, pady=4)
+
+                txt_lbl = f"{dt} ({dia_sem})"
+                chk_btn = ttk.Checkbutton(row_item, text=txt_lbl, variable=v_chk, command=atualizar_contador)
+                chk_btn.pack(side="left", anchor="w")
+
+                lbl_motivo = ttk.Label(row_item, text="Motivo:")
+                lbl_motivo.pack(side="left", padx=(12, 4))
+
+                var_motivo = tk.StringVar(value=obs or "Ajuste de horário")
+                ent_motivo = ttk.Entry(row_item, textvariable=var_motivo, width=35)
+                ent_motivo.pack(side="left", fill="x", expand=True, padx=(0, 6))
+
+                lista_dias_vars.append({
+                    "var": v_chk,
+                    "dia_semana": dia_sem,
+                    "data": dt,
+                    "e1": e1, "s1": s1, "e2": e2, "s2": s2, "e3": e3, "s3": s3,
+                    "var_motivo": var_motivo
+                })
+
+            atualizar_contador()
+
+            # Seção 3: Justificativa Geral
+            sec_just = ttk.LabelFrame(frame, text=" 📝 Justificativa Geral / Observações adicionais para o RH ", padding=8)
+            sec_just.pack(fill="x", pady=(0, 6))
+
+            txt_justificativa_geral = tk.Text(sec_just, height=3, font=("Segoe UI", 9), wrap="word")
+            txt_justificativa_geral.pack(fill="x", pady=2)
+
+            lbl_status = ttk.Label(frame, text="", font=("Segoe UI", 9, "bold"))
+            lbl_status.pack(anchor="w", pady=2)
+
+            def extrair_itens_tabela():
+                resultado = []
+                for d in lista_dias_vars:
+                    if d["var"].get():
+                        resultado.append({
+                            "dia_semana": d["dia_semana"],
+                            "data": d["data"],
+                            "e1": d["e1"], "s1": d["s1"], "e2": d["e2"], "s2": d["s2"], "e3": d["e3"], "s3": d["s3"],
+                            "motivo": d["var_motivo"].get().strip() or "Ajuste de horário"
+                        })
+                return resultado
+
+            def visualizar_pdf_teste():
+                colab_nome = ent_colab.get().strip() or "Colaborador"
+                cargo = ent_cargo.get().strip()
+                if not cargo:
+                    messagebox.showerror("Campo Obrigatório", "Por favor, informe a Função / Cargo do Colaborador.", parent=top)
+                    return
+                mes_comp = formatar_mes_competencia(ent_mes.get().strip())
+                dt_solic = ent_data_solic.get().strip()
+                gestor_nome = ent_gestor_nome.get().strip() or "Gestor"
+                rh_nome = ent_rh_nome.get().strip() or "RH"
+                just_geral_texto = txt_justificativa_geral.get("1.0", "end-1c").strip()
+
+                lbl_status.config(text="⏳ Gerando visualização do PDF de teste...", foreground="#0284c7")
+
+                def run_preview():
+                    try:
+                        itens = extrair_itens_tabela()
+                        if not itens:
+                            def warn_no_items():
+                                messagebox.showwarning("Aviso", "Selecione pelo menos um dia na lista para gerar a justificativa.", parent=top)
+                                lbl_status.config(text="")
+                            self.after(0, warn_no_items)
+                            return
+
+                        pdf_file = os.path.join(os.path.expanduser("~"), f"Justificativa_Ponto_TESTE_{mes_comp}.pdf")
+                        gerar_pdf_justificativa(
+                            colaborador_nome=colab_nome,
+                            colaborador_funcao=cargo,
+                            mes_competencia_str=mes_comp,
+                            data_solicitacao=dt_solic,
+                            justificativa_geral=just_geral_texto,
+                            gestor_nome=gestor_nome,
+                            rh_nome=rh_nome,
+                            itens_ponto=itens,
+                            output_pdf_path=pdf_file
+                        )
+                        
+                        def open_file():
+                            lbl_status.config(text="✅ PDF de Teste gerado e aberto!", foreground="#16a34a")
+                            try:
+                                os.startfile(pdf_file)
+                            except Exception:
+                                messagebox.showinfo("PDF Gerado", f"PDF de teste salvo com sucesso em:\n{pdf_file}", parent=top)
+
+                        self.after(0, open_file)
+                    except Exception as ex:
+                        err = str(ex)
+                        def update_err():
+                            lbl_status.config(text=f"❌ Erro ao gerar PDF: {err}", foreground="#dc2626")
+                        self.after(0, update_err)
+
+                threading.Thread(target=run_preview, daemon=True).start()
+
+            def disparar_teste_email():
+                colab_email = ent_colab_email.get().strip()
+                if not colab_email:
+                    messagebox.showerror("Erro", "Informe o seu e-mail no campo 'E-mail Colaborador'.", parent=top)
+                    return
+
+                itens = extrair_itens_tabela()
+                if not itens:
+                    messagebox.showwarning("Aviso", "Selecione pelo menos um dia na lista para enviar a justificativa.", parent=top)
+                    return
+                
+                colab_nome = ent_colab.get().strip() or "Colaborador"
+                cargo = ent_cargo.get().strip() or "Cargo"
+                mes_comp = formatar_mes_competencia(ent_mes.get().strip())
+                dt_solic = ent_data_solic.get().strip()
+                gestor_nome = ent_gestor_nome.get().strip() or "Gestor"
+                rh_nome = ent_rh_nome.get().strip() or "RH"
+                just_geral_texto = txt_justificativa_geral.get("1.0", "end-1c").strip()
+
+                dlg_email = tk.Toplevel(top)
+                dlg_email.title("📧 Teste de Envio por E-mail (SMTP)")
+                dlg_email.geometry("450x380")
+                dlg_email.transient(top)
+                dlg_email.grab_set()
+
+                p_frame = ttk.Frame(dlg_email, padding=15)
+                p_frame.pack(fill="both", expand=True)
+
+                saved_host = safe_keyring_get("smtp_host", "smtp.office365.com")
+
+                ttk.Label(p_frame, text="Configuração de Envio por E-mail", font=("Segoe UI", 10, "bold")).pack(anchor="w", pady=(0, 8))
+
+                preset_frame = ttk.Frame(p_frame)
+                preset_frame.pack(fill="x", pady=(0, 8))
+                ttk.Label(preset_frame, text="Provedor:").pack(side="left", padx=(0, 5))
+
+                def aplicar_preset(host, port):
+                    ent_smtp_host.delete(0, "end")
+                    ent_smtp_host.insert(0, host)
+                    ent_smtp_port.delete(0, "end")
+                    ent_smtp_port.insert(0, port)
+
+                ttk.Button(preset_frame, text="Outlook / Hotmail", command=lambda: aplicar_preset("smtp.office365.com", "587")).pack(side="left", padx=(0, 5))
+                ttk.Button(preset_frame, text="Gmail", command=lambda: aplicar_preset("smtp.gmail.com", "587")).pack(side="left")
+
+                g_frame = ttk.Frame(p_frame)
+                g_frame.pack(fill="x", pady=5)
+
+                ttk.Label(g_frame, text="Servidor SMTP:").grid(row=0, column=0, sticky="w", pady=3)
+                ent_smtp_host = ttk.Entry(g_frame, width=28)
+                ent_smtp_host.insert(0, saved_host)
+                ent_smtp_host.grid(row=0, column=1, sticky="w", pady=3, padx=5)
+
+                ttk.Label(g_frame, text="Porta SMTP:").grid(row=1, column=0, sticky="w", pady=3)
+                ent_smtp_port = ttk.Entry(g_frame, width=10)
+                ent_smtp_port.insert(0, safe_keyring_get("smtp_port", "587"))
+                ent_smtp_port.grid(row=1, column=1, sticky="w", pady=3, padx=5)
+
+                ttk.Label(g_frame, text="E-mail Remetente:").grid(row=2, column=0, sticky="w", pady=3)
+                ent_smtp_user = ttk.Entry(g_frame, width=28)
+                ent_smtp_user.insert(0, safe_keyring_get("smtp_user", colab_email))
+                ent_smtp_user.grid(row=2, column=1, sticky="w", pady=3, padx=5)
+
+                ttk.Label(g_frame, text="Senha de App:").grid(row=3, column=0, sticky="w", pady=3)
+                ent_smtp_pass = ttk.Entry(g_frame, width=28, show="*")
+                ent_smtp_pass.insert(0, safe_keyring_get("smtp_pass", ""))
+                ent_smtp_pass.grid(row=3, column=1, sticky="w", pady=3, padx=5)
+
+                lbl_email_status = ttk.Label(p_frame, text="", font=("Segoe UI", 9, "bold"))
+                lbl_email_status.pack(anchor="w", pady=5)
+
+                def enviar_smtp_confirm():
+                    h = ent_smtp_host.get().strip()
+                    p_str = ent_smtp_port.get().strip() or "587"
+                    u = ent_smtp_user.get().strip()
+                    pwd = ent_smtp_pass.get().strip()
+
+                    if not h or not u or not pwd:
+                        messagebox.showerror("Erro", "Preencha o servidor, e-mail e senha de SMTP.", parent=dlg_email)
+                        return
+
+                    try:
+                        keyring.set_password("DixiPontoApp", "smtp_host", h)
+                        keyring.set_password("DixiPontoApp", "smtp_port", p_str)
+                        keyring.set_password("DixiPontoApp", "smtp_user", u)
+                        keyring.set_password("DixiPontoApp", "smtp_pass", pwd)
+                    except Exception:
+                        pass
+
+                    lbl_email_status.config(text="⏳ Gerando PDF e enviando e-mail...", foreground="#0284c7")
+
+                    def run_smtp_async():
+                        try:
+                            pdf_file = os.path.join(os.path.expanduser("~"), f"Justificativa_Ponto_TESTE_{mes_comp}.pdf")
+                            gerar_pdf_justificativa(
+                                colaborador_nome=colab_nome,
+                                colaborador_funcao=cargo,
+                                mes_competencia_str=mes_comp,
+                                data_solicitacao=dt_solic,
+                                justificativa_geral=just_geral_texto,
+                                gestor_nome=gestor_nome,
+                                rh_nome=rh_nome,
+                                itens_ponto=itens,
+                                output_pdf_path=pdf_file
+                            )
+
+                            enviar_email_smtp(
+                                smtp_server=h,
+                                smtp_port=int(p_str),
+                                remetente_email=u,
+                                remetente_senha=pwd,
+                                destinatario_email=colab_email,
+                                assunto=f"[TESTE] Justificativa de Ponto - {colab_nome} ({mes_comp})",
+                                corpo_texto=f"Olá {colab_nome},\n\nSegue em anexo a Justificativa de Ponto em formato PDF referente ao mês de {mes_comp}.\n\nAtenciosamente,\nDixi Auditor",
+                                caminho_pdf=pdf_file
+                            )
+
+                            def update_smtp_success():
+                                lbl_email_status.config(text="✅ E-mail enviado com sucesso!", foreground="#16a34a")
+                                messagebox.showinfo("Sucesso", f"E-mail de teste com o PDF em anexo enviado para:\n{colab_email}", parent=dlg_email)
+                                dlg_email.destroy()
+
+                            self.after(0, update_smtp_success)
+                        except Exception as ex_smtp:
+                            err_s = str(ex_smtp)
+                            def update_smtp_err():
+                                lbl_email_status.config(text=f"❌ Erro ao enviar: {err_s}", foreground="#dc2626")
+                            self.after(0, update_smtp_err)
+
+                    threading.Thread(target=run_smtp_async, daemon=True).start()
+
+                ttk.Button(p_frame, text="📧 Confirmar e Enviar E-mail", command=enviar_smtp_confirm).pack(fill="x", pady=10)
+
+            def disparar_envio_autentique():
+                token = ent_token.get().strip()
+                colab_nome = ent_colab.get().strip()
+                colab_email = ent_colab_email.get().strip()
+                cargo = ent_cargo.get().strip()
+                if not cargo:
+                    messagebox.showerror("Campo Obrigatório", "Por favor, informe a Função / Cargo do Colaborador.", parent=top)
+                    return
+                if not token:
+                    messagebox.showerror("Erro", "Por favor, preencha o Token da API do Autentique.", parent=top)
+                    return
+                mes_comp = formatar_mes_competencia(ent_mes.get().strip())
+                dt_solic = ent_data_solic.get().strip()
+                gestor_nome = ent_gestor_nome.get().strip()
+                gestor_email = ent_gestor_email.get().strip()
+                rh_nome = ent_rh_nome.get().strip()
+                rh_email = ent_rh_email.get().strip()
+                just_geral_texto = txt_justificativa_geral.get("1.0", "end-1c").strip()
+
+                if not colab_email or not gestor_email or not rh_email:
+                    messagebox.showerror("Erro", "Por favor, informe os e-mails do Colaborador, Gestor e RH.", parent=top)
+                    return
+
+                itens = extrair_itens_tabela()
+                if not itens:
+                    messagebox.showwarning("Aviso", "Selecione pelo menos um dia na lista para enviar a justificativa.", parent=top)
+                    return
+
+                try:
+                    keyring.set_password("DixiPontoApp", "autentique_token", token)
+                    keyring.set_password("DixiPontoApp", "colaborador_email", colab_email)
+                    keyring.set_password("DixiPontoApp", "gestor_email", gestor_email)
+                    keyring.set_password("DixiPontoApp", "rh_email", rh_email)
+                    keyring.set_password("DixiPontoApp", "gestor_nome", gestor_nome)
+                    keyring.set_password("DixiPontoApp", "rh_nome", rh_nome)
+                except Exception:
+                    pass
+
+                btn_autentique.config(state="disabled")
+                lbl_status.config(text="⏳ Gerando documento PDF e enviando para o Autentique...", foreground="#0284c7")
+
+                def run_async():
+                    try:
+                        pdf_file = os.path.join(os.path.expanduser("~"), f"Justificativa_Ponto_{mes_comp}.pdf")
+                        gerar_pdf_justificativa(
+                            colaborador_nome=colab_nome,
+                            colaborador_funcao=cargo,
+                            mes_competencia_str=mes_comp,
+                            data_solicitacao=dt_solic,
+                            justificativa_geral=just_geral_texto,
+                            gestor_nome=gestor_nome,
+                            rh_nome=rh_nome,
+                            itens_ponto=itens,
+                            output_pdf_path=pdf_file
+                        )
+
+                        action_map = {
+                            "Assinar": "SIGN",
+                            "Testemunha": "SIGN_AS_A_WITNESS",
+                            "Aprovar": "APPROVE"
+                        }
+
+                        lista_signatarios = [
+                            {
+                                "email": colab_email,
+                                "action": action_map.get(combo_colab_role.get(), "SIGN"),
+                                "positions": [{"x": "10", "y": "85", "z": 1, "element": "SIGNATURE"}]
+                            },
+                            {
+                                "email": gestor_email,
+                                "action": action_map.get(combo_gestor_role.get(), "SIGN"),
+                                "positions": [{"x": "42", "y": "85", "z": 1, "element": "SIGNATURE"}]
+                            },
+                            {
+                                "email": rh_email,
+                                "action": action_map.get(combo_rh_role.get(), "SIGN"),
+                                "positions": [{"x": "73", "y": "85", "z": 1, "element": "SIGNATURE"}]
+                            }
+                        ]
+
+                        for w_ex in lista_widgets_extras:
+                            ex_e = w_ex["email"].get().strip()
+                            ex_p = action_map.get(w_ex["papel"].get(), "SIGN")
+                            if ex_e:
+                                lista_signatarios.append({
+                                    "email": ex_e,
+                                    "action": ex_p
+                                })
+
+                        res = enviar_justificativa_autentique(
+                            token=token,
+                            caminho_pdf=pdf_file,
+                            nome_documento=f"Justificativa de Ponto - {colab_nome} ({mes_comp})",
+                            lista_signatarios=lista_signatarios
+                        )
+
+                        def update_success():
+                            lbl_status.config(text="✅ Documento enviado com sucesso ao Autentique!", foreground="#16a34a")
+                            messagebox.showinfo("Sucesso", f"Justificativa enviada com sucesso para assinatura de {colab_email}, {gestor_email} e {rh_email}!", parent=top)
+                            top.destroy()
+
+                        self.after(0, update_success)
+
+                    except Exception as ex:
+                        err_msg = str(ex)
+                        def update_error():
+                            lbl_status.config(text=f"❌ Erro ao enviar: {err_msg}", foreground="#dc2626")
+                            btn_autentique.config(state="normal")
+                        self.after(0, update_error)
+
+                threading.Thread(target=run_async, daemon=True).start()
+
+            btn_frame = ttk.Frame(bottom_bar)
+            btn_frame.pack(fill="x")
+
+            btn_preview = ttk.Button(btn_frame, text="👁️ Gerar e Visualizar PDF", command=visualizar_pdf_teste)
+            btn_preview.pack(side="left", fill="x", expand=True, padx=(0, 10))
+
+            btn_autentique = ttk.Button(btn_frame, text="🚀 Enviar via Autentique", command=disparar_envio_autentique)
+            btn_autentique.pack(side="left", fill="x", expand=True)
+
+        except Exception as top_err:
+            logging.error(f"Erro ao inicializar janela de justificativa: {top_err}")
+            top.destroy()
 if __name__ == "__main__":
     AppPonto().mainloop()

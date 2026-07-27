@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <title>Formulário para Autorização Justificativa de Ponto</title>
+    <style>
+        @page {
+            size: A4 portrait;
+            margin: 12mm 14mm 12mm 14mm;
+        }
+
+        body {
+            font-family: 'Segoe UI', Arial, sans-serif;
+            font-size: 10.5px;
+            color: #1b1b1b;
+            line-height: 1.3;
+            margin: 0;
+            padding: 0;
+        }
+
+        .container {
+            width: 100%;
+            margin: 0 auto;
+        }
+
+        /* BANNER PRINCIPAL (VERDE REGISTRO.PY) */
+        .title-banner {
+            text-align: center;
+            background-color: #2E7D32;
+            color: #FFFFFF;
+            font-weight: bold;
+            font-size: 13px;
+            padding: 8px;
+            letter-spacing: 0.5px;
+            text-transform: uppercase;
+            border-radius: 3px;
+            margin-bottom: 10px;
+        }
+
+        /* TABELA DE CABEÇALHO (COLABORADOR, MÊS, DATA, FUNÇÃO) */
+        .header-info-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 10px;
+        }
+
+        .header-info-table td {
+            padding: 6px 8px;
+            border: 1px solid #81c784;
+            font-size: 10.5px;
+        }
+
+        .label-cell {
+            font-weight: bold;
+            color: #1b5e20;
+            background-color: #e8f5e9;
+            width: 22%;
+        }
+
+        .value-cell {
+            color: #0d3b11;
+            font-weight: bold;
+        }
+
+        /* BANNERS DE SEÇÃO VERDES */
+        .section-banner {
+            background-color: #1b5e20;
+            color: #ffffff;
+            font-weight: bold;
+            font-size: 10.5px;
+            padding: 5px 8px;
+            text-transform: uppercase;
+            letter-spacing: 0.3px;
+            margin-top: 8px;
+            margin-bottom: 6px;
+            border-radius: 2px;
+        }
+
+        /* TABELA PRINCIPAL DE PONTO */
+        .table-ponto {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 15px;
+        }
+
+        .table-ponto th {
+            background-color: #c8e6c9;
+            color: #1b5e20;
+            font-weight: bold;
+            padding: 6px;
+            border: 1px solid #66bb6a;
+            text-align: center;
+            font-size: 10px;
+            text-transform: uppercase;
+        }
+
+        .table-ponto td {
+            padding: 5px 6px;
+            border: 1px solid #a5d6a7;
+            text-align: center;
+            font-size: 10px;
+        }
+
+        .table-ponto tr:nth-child(even) {
+            background-color: #f1f8e9;
+        }
+
+        .day-title {
+            font-weight: bold;
+            text-align: center !important;
+            color: #1b5e20;
+            background-color: #e8f5e9;
+            text-transform: uppercase;
+            vertical-align: middle;
+        }
+
+        .date-cell {
+            text-align: center !important;
+            vertical-align: middle;
+            font-weight: bold;
+            color: #1b1b1b;
+        }
+
+        .punch-label-cell {
+            text-align: left !important;
+            font-weight: bold;
+            color: #1b5e20;
+            padding-left: 8px !important;
+            width: 18%;
+        }
+
+        .punch-value-cell {
+            text-align: left !important;
+            font-weight: normal;
+            color: #1b1b1b;
+            padding-left: 6px !important;
+            width: 17%;
+        }
+
+        .motivo-cell {
+            text-align: left !important;
+            font-size: 10px;
+            color: #1b5e20;
+            font-weight: bold;
+            vertical-align: middle;
+            padding: 6px 8px !important;
+        }
+
+        /* ÁREA DE ASSINATURAS */
+        .signatures-wrapper {
+            margin-top: 35px;
+            width: 100%;
+            display: table;
+            table-layout: fixed;
+        }
+
+        .signature-column {
+            display: table-cell;
+            text-align: center;
+            vertical-align: bottom;
+            padding: 0 10px;
+        }
+
+        .signature-line-rule {
+            border-top: 1.5px solid #2E7D32;
+            margin-top: 35px;
+            margin-bottom: 4px;
+        }
+
+        .signature-header-title {
+            font-weight: bold;
+            font-size: 9px;
+            color: #1b5e20;
+            text-transform: uppercase;
+        }
+
+        .signature-person-name {
+            font-size: 8.5px;
+            color: #43a047;
+            margin-top: 2px;
+        }
+
+        .signature-date {
+            font-size: 8px;
+            color: #66bb6a;
+            margin-top: 2px;
+        }
+
+        .footer-note {
+            margin-top: 20px;
+            text-align: center;
+            font-size: 8px;
+            color: #66bb6a;
+            border-top: 1px solid #c8e6c9;
+            padding-top: 5px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- TÍTULO FIEL AO EXCEL -->
+        <div class="title-banner">
+            FORMULÁRIO PARA AUTORIZAÇÃO JUSTIFICATIVA DE PONTO
+        </div>
+
+        <!-- TABELA DE CABEÇALHO -->
+        <table class="header-info-table">
+            <tr>
+                <td class="label-cell">COLABORADOR:</td>
+                <td class="value-cell" style="width: 40%;">{{ colaborador_nome }}</td>
+                <td class="label-cell">FUNÇÃO:</td>
+                <td class="value-cell">{{ colaborador_funcao }}</td>
+            </tr>
+            <tr>
+                <td class="label-cell">MÊS DE COMPETÊNCIA:</td>
+                <td class="value-cell">{{ mes_competencia }}</td>
+                <td class="label-cell">DATA:</td>
+                <td class="value-cell">{{ data_solicitacao }}</td>
+            </tr>
+        </table>
+
+        <!-- SEÇÕES FIÉIS AO EXCEL -->
+        <div class="section-banner">JUSTIFICATIVA DA NECESSIDADE</div>
+        <div class="section-banner">PREENCHIMENTO DO FUNCIONÁRIO</div>
+
+        <!-- TABELA DE PONTO FIEL AO EXCEL -->
+        <table class="table-ponto">
+            <thead>
+                <tr>
+                    <th style="width: 18%;">SEMANA</th>
+                    <th style="width: 12%;">DATA</th>
+                    <th colspan="2" style="width: 35%;">HORÁRIO DA HORA EXTRA</th>
+                    <th style="width: 35%;">MOTIVO / JUSTIFICATIVA</th>
+                </tr>
+            </thead>
+            <tbody>
+                {{ linhas_ponto_html }}
+            </tbody>
+        </table>
+
+        {{ justificativa_geral }}
+
+        <!-- ASSINATURAS FIÉIS AO EXCEL -->
+        <div class="signatures-wrapper">
+            <div class="signature-column">
+                <div class="signature-line-rule"></div>
+                <div class="signature-header-title">ASSINATURA COLABORADOR</div>
+                <div class="signature-person-name">{{ colaborador_nome }}</div>
+                <div class="signature-date">DATA: ____/____/________</div>
+            </div>
+            <div class="signature-column">
+                <div class="signature-line-rule"></div>
+                <div class="signature-header-title">ASSINATURA GESTOR IMEDIATO</div>
+                <div class="signature-person-name">{{ gestor_nome }}</div>
+                <div class="signature-date">DATA: ____/____/________</div>
+            </div>
+            <div class="signature-column">
+                <div class="signature-line-rule"></div>
+                <div class="signature-header-title">ASSINATURA RECURSOS HUMANOS</div>
+                <div class="signature-person-name">{{ rh_nome }}</div>
+                <div class="signature-date">DATA: ____/____/________</div>
+            </div>
+        </div>
+
+        <div class="footer-note">
+            Documento Oficial Dixi Auditor • Visto e Assinatura via Autentique
+        </div>
+    </div>
+</body>
+</html>

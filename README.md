@@ -1,25 +1,31 @@
 # Dixi Auditor - Pagare
 
-Este é um aplicativo desktop desenvolvido em Python com interface gráfica (Tkinter) para auditoria e controle de horas do espelho de ponto da **Dixi Ponto**. 
+Este é um aplicativo desktop desenvolvido em Python com interface gráfica (Tkinter) para auditoria, controle de horas e justificativa de espelho de ponto da **Dixi Ponto**. 
 
-O sistema consome a API oficial da Dixi para buscar as batidas de ponto do colaborador, processa a jornada com tolerância e permite visualizar, auditar e exportar os dados consolidados para planilhas Excel formatadas.
+O sistema consome a API oficial da Dixi para buscar as batidas de ponto do colaborador, processa a jornada com tolerância e permite visualizar, auditar, recalcular e exportar os dados consolidados para planilhas Excel formatadas e relatórios oficiais em PDF para o RH via **Autentique**.
 
 ---
 
 ## ✨ Funcionalidades
 
-- **Autenticação Segura:** Login integrado e armazenamento seguro da última credencial utilizada usando o cofre de credenciais do Windows (`keyring`).
-- **Visualização Direta (Grid):** Visualização interativa das marcações diárias na própria aplicação com cores dinâmicas para fácil identificação:
+- **Autenticação Segura & Auto-preenchimento:** Login integrado à API Dixi com armazenamento seguro no cofre do Windows (`keyring`). Os dados de perfil do colaborador logado (Nome Completo e E-mail) são auto-preenchidos automaticamente nos formulários.
+- **Tabela Principal com Checkboxes (`[☑]` / `[☐]`):** Primeira coluna `Sel` permite marcar ou desmarcar dias com um único clique. Clique no cabeçalho **`Sel [☑]`** para marcar/desmarcar todos os dias de uma só vez.
+- **Visualização Direta (Grid):** Marcações diárias com cores dinâmicas para fácil identificação auditável:
   - 🟢 **Verde:** Saldo positivo (horas extras).
   - 🔴 **Vermelho:** Saldo negativo (atrasos).
   - 🔴 **Rosa com texto vermelho:** Dias com batidas faltantes (pendências).
   - 🟢 **Verde Oliva:** Dia em andamento (desconsiderado do saldo acumulado para evitar déficits parciais).
+- **Formulário de Justificativa de Ponto para o RH:**
+  - **Filtro Inteligente:** Ao abrir o modal, se o usuário selecionou/marcou dias específicos na tabela principal, o formulário carrega **apenas esses dias selecionados**.
+  - **Layout Fiel à Planilha Excel:** Gera PDF profissional espelhado na planilha de ponto oficial, com sub-linhas detalhadas (`ENTRADA:`, `SAÍDA REFEIÇÃO:`, `RETORNO REFEIÇÃO:`, `SAÍDA:`) e justificativas individuais por dia.
+  - **Assinatura Digital via Autentique:** Permite selecionar o papel de cada signatário (**`Assinar`**, **`Testemunha`**, **`Aprovar`**) e incluir ilimitadas pessoas através do botão **`➕ Adicionar Signatário Extra`**.
+  - **Interface Responsiva com Rodapé Fixo:** Barra de botões (*`👁️ Gerar e Visualizar PDF`* e *`🚀 Enviar via Autentique`*) fixada permanentemente na parte inferior da tela com formulário rolável.
 - **Seletor de Datas Inteligente:** Filtros de data horizontais com lista suspensa nativa em português e ano digitável. O número máximo de dias do seletor se ajusta automaticamente com base no mês e no ano selecionado (incluindo anos bissextos).
-- **Filtro de Dia Atual (Em Andamento):** Checkbox `☑ Ignorar Dia Atual (Em Andamento)` para desconsiderar automaticamente marcações incompletas de hoje no saldo total acumulado e nas pendências da IA.
+- **Filtro de Dia Atual (Em Andamento):** Checkbox `Ignorar Dia Atual (Em Andamento)` para desconsiderar automaticamente marcações incompletas de hoje no saldo total acumulado e nas pendências da IA.
 - **Auditoria Interativa & Recálculo por IA:** Painel de análise avançada por IA que permite enviar instruções de ajuste em linguagem natural (ex: *"No dia 15/07 considere saída às 18:00 e abone o dia 10/07"*). A IA reanalisa a jornada, recalcula os saldos e aplica os ajustes diretamente na tabela do aplicativo.
 - **Simulação e Edição de Ponto (Modo Auditoria):** Dê um duplo clique em qualquer marcação na tabela para editar ou apagar horários. Clique no botão **"Recalcular Ponto"** para verificar em tempo real como ficará o saldo acumulado antes de exportar.
 - **Regra de Almoço Inteligente:** Computação automática do intervalo de almoço. Se o colaborador retornar antes de 1 hora de intervalo, a antecipação não gera saldo de horas extras (computa no mínimo 1 hora inteira de intervalo). Se retornar após 1 hora, o atraso é contabilizado normalmente na jornada.
-- **Exportação Formatada e Auditável para Excel:** Gera planilhas Excel organizadas com cabeçalhos dinâmicos, saldo geral acumulado e cores auditáveis (destaque em amarelo para ajustes por IA e oliva para dias em andamento).
+- **Exportação Formatada e Auditável para Excel:** Gera planilhas Excel organizadas com cabeçalhos dinâmicos, saldo geral acumulado e cores auditáveis.
 - **Suporte a Turnos Noturnos:** Reconhece viradas de turno e calcula corretamente marcações que passam da meia-noite.
 
 ---
