@@ -235,14 +235,10 @@ class PontoEngine:
         
 
         saldo = 0
-
         if total_sec > 0:
-
             diff = total_sec - cls.JORNADA_SEG
-
             if abs(diff) > cls.TOLERANCIA_SEG:
-
-                saldo = diff - cls.TOLERANCIA_SEG if diff > 0 else diff + cls.TOLERANCIA_SEG
+                saldo = diff
 
 
 
