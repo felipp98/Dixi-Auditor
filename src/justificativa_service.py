@@ -2,6 +2,7 @@ import os
 import re
 import datetime
 import smtplib
+import base64
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from email.mime.base import MIMEBase
@@ -55,7 +56,10 @@ def gerar_pdf_justificativa(
     rh_nome: str,
     itens_ponto: List[Dict],
     output_pdf_path: str,
-    template_path: Optional[str] = None
+    template_path: Optional[str] = None,
+    auto_assinar_colaborador: bool = False,
+    assinatura_img_path: Optional[str] = None,
+    data_assinatura_str: Optional[str] = None
 ) -> str:
     """
     Injeta os dados no template HTML e gera um arquivo PDF em tamanho A4.
@@ -126,6 +130,32 @@ def gerar_pdf_justificativa(
     else:
         html_just_geral = ""
 
+    if not data_assinatura_str:
+        if auto_assinar_colaborador:
+            data_assinatura_str = datetime.datetime.now().strftime("%d/%m/%Y %H:%M")
+        else:
+            data_assinatura_str = "____/____/________"
+
+    # Construção do Elemento de Assinatura do Colaborador
+    colab_sig_html = '<div class="signature-line-rule"></div>'
+    if assinatura_img_path and os.path.isfile(assinatura_img_path):
+        try:
+            with open(assinatura_img_path, "rb") as img_f:
+                b64_data = base64.b64encode(img_f.read()).decode("utf-8")
+            ext = os.path.splitext(assinatura_img_path)[1].lower().replace(".", "")
+            mime = "image/png" if ext == "png" else "image/jpeg"
+            colab_sig_html = f'''<div style="text-align: center; margin-bottom: 2px;">
+                <img src="data:{mime};base64,{b64_data}" style="max-height: 48px; max-width: 150px; object-fit: contain;"/>
+            </div>'''
+        except Exception as ex_img:
+            colab_sig_html = f'<div class="signature-line-rule"></div>'
+    elif auto_assinar_colaborador:
+        colab_sig_html = f'''<div style="border: 1px dashed #166534; background-color: #f0fdf4; color: #166534; padding: 4px 6px; border-radius: 4px; font-size: 8px; line-height: 1.25; text-align: center; margin-bottom: 4px;">
+            <strong style="font-size: 9px; color: #15803d;">✔ ASSINADO DIGITALMENTE</strong><br/>
+            <span>{colaborador_nome or "Colaborador"}</span><br/>
+            <span style="font-size: 7px; color: #166534;">Data: {data_assinatura_str}</span>
+        </div>'''
+
     content = template.replace("{{ colaborador_nome }}", colaborador_nome or "")
     content = content.replace("{{ colaborador_funcao }}", colaborador_funcao or "")
     content = content.replace("{{ mes_competencia }}", mes_extenso)
@@ -134,6 +164,8 @@ def gerar_pdf_justificativa(
     content = content.replace("{{ gestor_nome }}", gestor_nome or "Gestor Imediato")
     content = content.replace("{{ rh_nome }}", rh_nome or "Recursos Humanos")
     content = content.replace("{{ linhas_ponto_html }}", linhas_html)
+    content = content.replace("{{ colaborador_assinatura_element }}", colab_sig_html)
+    content = content.replace("{{ colaborador_data_assinatura }}", data_assinatura_str)
 
     temp_html_path = output_pdf_path.replace(".pdf", ".temp.html")
     with open(temp_html_path, "w", encoding="utf-8") as f:

@@ -21,6 +21,16 @@
         .container {
             width: 100%;
             margin: 0 auto;
+            position: relative;
+            min-height: 268mm;
+            box-sizing: border-box;
+        }
+
+        .bottom-footer-container {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            width: 100%;
         }
 
         /* BANNER PRINCIPAL (VERDE REGISTRO.PY) */
@@ -240,30 +250,32 @@
 
         {{ justificativa_geral }}
 
-        <!-- ASSINATURAS FIÉIS AO EXCEL -->
-        <div class="signatures-wrapper">
-            <div class="signature-column">
-                <div class="signature-line-rule"></div>
-                <div class="signature-header-title">ASSINATURA COLABORADOR</div>
-                <div class="signature-person-name">{{ colaborador_nome }}</div>
-                <div class="signature-date">DATA: ____/____/________</div>
+        <!-- ASSINATURAS E RODAPÉ FIXOS NO RODAPÉ DA FOLHA -->
+        <div class="bottom-footer-container">
+            <div class="signatures-wrapper">
+                <div class="signature-column">
+                    {{ colaborador_assinatura_element }}
+                    <div class="signature-header-title">ASSINATURA COLABORADOR</div>
+                    <div class="signature-person-name">{{ colaborador_nome }}</div>
+                    <div class="signature-date">DATA: {{ colaborador_data_assinatura }}</div>
+                </div>
+                <div class="signature-column">
+                    <div class="signature-line-rule"></div>
+                    <div class="signature-header-title">ASSINATURA GESTOR IMEDIATO</div>
+                    <div class="signature-person-name">{{ gestor_nome }}</div>
+                    <div class="signature-date">DATA: ____/____/________</div>
+                </div>
+                <div class="signature-column">
+                    <div class="signature-line-rule"></div>
+                    <div class="signature-header-title">ASSINATURA RECURSOS HUMANOS</div>
+                    <div class="signature-person-name">{{ rh_nome }}</div>
+                    <div class="signature-date">DATA: ____/____/________</div>
+                </div>
             </div>
-            <div class="signature-column">
-                <div class="signature-line-rule"></div>
-                <div class="signature-header-title">ASSINATURA GESTOR IMEDIATO</div>
-                <div class="signature-person-name">{{ gestor_nome }}</div>
-                <div class="signature-date">DATA: ____/____/________</div>
-            </div>
-            <div class="signature-column">
-                <div class="signature-line-rule"></div>
-                <div class="signature-header-title">ASSINATURA RECURSOS HUMANOS</div>
-                <div class="signature-person-name">{{ rh_nome }}</div>
-                <div class="signature-date">DATA: ____/____/________</div>
-            </div>
-        </div>
 
-        <div class="footer-note">
-            Documento Oficial Dixi Auditor • Visto e Assinatura via Autentique
+            <div class="footer-note">
+                Documento Oficial Dixi Auditor • Visto e Assinatura via Autentique
+            </div>
         </div>
     </div>
 </body>

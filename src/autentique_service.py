@@ -42,7 +42,24 @@ def enviar_justificativa_autentique(
             "action": sig.get("action", "SIGN")
         }
         if "positions" in sig and sig["positions"]:
-            item["positions"] = sig["positions"]
+            pos_cleaned = []
+            for p in sig["positions"]:
+                try:
+                    px = float(p.get("x", 0))
+                    py = float(p.get("y", 0))
+                    pz = int(p.get("z", 1))
+                    scale_val = float(p.get("scale", 0.85))
+                    pos_cleaned.append({
+                        "x": px,
+                        "y": py,
+                        "z": pz,
+                        "element": str(p.get("element", "SIGNATURE")).upper(),
+                        "scale": scale_val
+                    })
+                except (ValueError, TypeError):
+                    pass
+            if pos_cleaned:
+                item["positions"] = pos_cleaned
         signers_input.append(item)
 
     variables = {
