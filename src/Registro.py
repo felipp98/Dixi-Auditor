@@ -923,25 +923,25 @@ class AppPonto(tk.Tk):
 
         
 
-        self.bg_color = "#F6F9F1"
+        self.bg_color = "#F8FAF9"
 
         self.surface_color = "#FFFFFF"
 
         self.primary_color = "#6ACC32"
 
-        self.primary_dark = "#59AB2A"
+        self.primary_dark = "#4C9A23"
 
-        self.primary_soft = "#EFF7D9"
+        self.primary_soft = "#EAF5E3"
 
-        self.text_color = "#16311A"
+        self.text_color = "#1E293B"
 
-        self.muted_text_color = "#5D7058"
+        self.muted_text_color = "#64748B"
 
-        self.border_color = "#DDE7CF"
+        self.border_color = "#E2E8F0"
 
-        self.danger_color = "#C0392B"
+        self.danger_color = "#C5221F"
 
-        self.warning_bg = "#FFF1CC"
+        self.warning_bg = "#FEF7E0"
 
         self.logo_image = None
 
@@ -1277,29 +1277,29 @@ class AppPonto(tk.Tk):
 
 
 
-        tk.Label(
-
-            brand_frame,
-
-            text="Consulta, revisão e exportação do espelho de ponto em uma experiência mais clara, rápida e confiável.",
-
-            bg=self.primary_soft,
-
-            fg=self.muted_text_color,
-
-            font=("Segoe UI", 8),
-
-            wraplength=260,
-
-            justify="center"
-
-        ).pack(anchor="center", pady=(6, 0))
-
-
-
     def _init_login_ui(self):
 
-        self.geometry("360x620")
+        for w in self.winfo_children():
+
+            w.destroy()
+
+
+
+        try:
+
+            self.state("normal")
+
+        except Exception:
+
+            pass
+
+
+
+        self.geometry("740x490")
+
+        self.configure(bg=self.bg_color)
+
+
 
         self.frame = tk.Frame(self, bg=self.bg_color)
 
@@ -1307,51 +1307,13 @@ class AppPonto(tk.Tk):
 
 
 
-        backdrop = tk.Canvas(self.frame, bg=self.bg_color, highlightthickness=0, bd=0)
+        # Container Principal Split Card (Pagare Style)
 
-        backdrop.place(relx=0, rely=0, relwidth=1, relheight=1)
+        card_wrapper = tk.Frame(
 
-        backdrop.create_oval(-60, -40, 180, 130, fill="#E6F3C8", outline="")
-
-        backdrop.create_oval(220, -20, 420, 120, fill="#EDF7D8", outline="")
-
-        backdrop.create_oval(210, 290, 430, 510, fill="#E0F0BA", outline="")
-
-
-
-        content = tk.Frame(self.frame, bg=self.bg_color, padx=16, pady=12)
-
-        content.pack(expand=True, fill="both")
-
-
-
-        hero_panel = tk.Frame(content, bg=self.primary_soft, bd=0, highlightthickness=0)
-
-        hero_panel.pack(fill="x", pady=(0, 8))
-
-
-
-        tk.Frame(hero_panel, bg=self.primary_color, height=4).pack(fill="x")
-
-
-
-        hero_body = tk.Frame(hero_panel, bg=self.primary_soft, padx=14, pady=12)
-
-        hero_body.pack(fill="x")
-
-        self._render_login_brand(hero_body)
-
-
-
-        login_card = tk.Frame(
-
-            content,
+            self.frame,
 
             bg=self.surface_color,
-
-            padx=16,
-
-            pady=14,
 
             highlightbackground=self.border_color,
 
@@ -1361,7 +1323,103 @@ class AppPonto(tk.Tk):
 
         )
 
-        login_card.pack(fill="x")
+        card_wrapper.pack(expand=True, fill="both", padx=24, pady=24)
+
+
+
+        # Coluna Esquerda: Painel Hero Verde Suave (3.png / 4.png)
+
+        hero_panel = tk.Frame(card_wrapper, bg=self.primary_soft, width=310, bd=0, highlightthickness=0)
+
+        hero_panel.pack(side="left", fill="both", expand=False)
+
+        hero_panel.pack_propagate(False)
+
+
+
+        tk.Frame(hero_panel, bg=self.primary_color, width=6).pack(side="left", fill="y")
+
+
+
+        hero_content = tk.Frame(hero_panel, bg=self.primary_soft, padx=22, pady=24)
+
+        hero_content.pack(expand=True, fill="both")
+
+
+
+        self._render_login_brand(hero_content)
+
+
+
+        tk.Label(
+
+            hero_content,
+
+            text="Bem-vindo! 👋",
+
+            bg=self.primary_soft,
+
+            fg=self.text_color,
+
+            font=("Segoe UI", 16, "bold")
+
+        ).pack(anchor="center", pady=(14, 4))
+
+
+
+        tk.Label(
+
+            hero_content,
+
+            text="Audite seus pontos, envie justificativas para o RH e acompanhe saldos com facilidade.",
+
+            bg=self.primary_soft,
+
+            fg=self.muted_text_color,
+
+            font=("Segoe UI", 9),
+
+            wraplength=240,
+
+            justify="center"
+
+        ).pack(anchor="center", pady=(0, 14))
+
+
+
+        # Bullets de Recursos Centralizados
+
+        features_box = tk.Frame(hero_content, bg=self.primary_soft)
+
+        features_box.pack(anchor="center")
+
+
+
+        features = ["✓ Batidas em tempo real", "✓ Auditoria por IA", "✓ Assinatura Autentique"]
+
+        for f in features:
+
+            tk.Label(
+
+                features_box,
+
+                text=f,
+
+                bg=self.primary_soft,
+
+                fg=self.primary_dark,
+
+                font=("Segoe UI", 9, "bold")
+
+            ).pack(anchor="w", pady=1)
+
+
+
+        # Coluna Direita: Formulário de Acesso
+
+        login_card = tk.Frame(card_wrapper, bg=self.surface_color, padx=32, pady=24)
+
+        login_card.pack(side="right", fill="both", expand=True)
 
 
 
@@ -1377,7 +1435,7 @@ class AppPonto(tk.Tk):
 
             font=("Segoe UI", 15, "bold")
 
-        ).pack(anchor="center")
+        ).pack(anchor="w")
 
 
 
@@ -1391,17 +1449,17 @@ class AppPonto(tk.Tk):
 
             fg=self.muted_text_color,
 
-            font=("Segoe UI", 8),
+            font=("Segoe UI", 9),
 
-            wraplength=250,
+            wraplength=260,
 
-            justify="center"
+            justify="left"
 
-        ).pack(anchor="center", pady=(3, 10))
+        ).pack(anchor="w", pady=(3, 14))
 
 
 
-        self.ent_user = self._build_login_input(login_card, "Usuário")
+        self.ent_user = self._build_login_input(login_card, "Usuário / E-mail")
 
         self.ent_pass = self._build_login_input(login_card, "Senha", show="*")
 
@@ -1418,6 +1476,24 @@ class AppPonto(tk.Tk):
             if last_pw:
 
                 self.ent_pass.insert(0, last_pw)
+
+
+
+        self.lbl_login_status = tk.Label(
+
+            login_card,
+
+            text="",
+
+            bg=self.surface_color,
+
+            fg=self.danger_color,
+
+            font=("Segoe UI", 9)
+
+        )
+
+        self.lbl_login_status.pack(anchor="w", pady=(2, 8))
 
 
 
@@ -1451,7 +1527,7 @@ class AppPonto(tk.Tk):
 
         )
 
-        self.btn_login.pack(fill="x", pady=(2, 8))
+        self.btn_login.pack(fill="x", pady=(4, 12))
 
         self._bind_button_hover(self.btn_login)
 
@@ -1459,7 +1535,7 @@ class AppPonto(tk.Tk):
 
         footer = tk.Frame(login_card, bg=self.surface_color)
 
-        footer.pack(fill="x", pady=(0, 0))
+        footer.pack(fill="x", pady=(6, 0))
 
 
 
@@ -1473,7 +1549,7 @@ class AppPonto(tk.Tk):
 
             fg=self.text_color,
 
-            font=("Segoe UI", 8, "bold")
+            font=("Segoe UI", 9, "bold")
 
         ).pack(anchor="center")
 
@@ -1489,9 +1565,9 @@ class AppPonto(tk.Tk):
 
             fg=self.muted_text_color,
 
-            font=("Segoe UI", 7),
+            font=("Segoe UI", 8),
 
-            wraplength=250,
+            wraplength=300,
 
             justify="center"
 
@@ -1773,6 +1849,16 @@ class AppPonto(tk.Tk):
 
         self.geometry("1220x760")
 
+        try:
+
+            self.state("zoomed")
+
+        except Exception:
+
+            pass
+
+
+
         self.configure(bg=self.bg_color)
 
 
@@ -1881,6 +1967,8 @@ class AppPonto(tk.Tk):
 
         user_name = self.service.user_name or "Colaborador"
 
+        first_name = user_name.split()[0] if user_name else "Colaborador"
+
         user_role = self.service.user_cargo or "Acesso autenticado"
 
 
@@ -1891,17 +1979,23 @@ class AppPonto(tk.Tk):
 
 
 
+        badge_info = tk.Frame(badge, bg=self.primary_soft)
+
+        badge_info.pack(side="left")
+
+
+
         tk.Label(
 
-            badge,
+            badge_info,
 
-            text=user_name,
+            text=f"Olá, {first_name} 👋",
 
             bg=self.primary_soft,
 
             fg=self.text_color,
 
-            font=("Segoe UI", 10, "bold")
+            font=("Segoe UI", 11, "bold")
 
         ).pack(anchor="e")
 
@@ -1909,7 +2003,7 @@ class AppPonto(tk.Tk):
 
         tk.Label(
 
-            badge,
+            badge_info,
 
             text=user_role,
 
@@ -1920,6 +2014,186 @@ class AppPonto(tk.Tk):
             font=("Segoe UI", 9)
 
         ).pack(anchor="e", pady=(2, 0))
+
+
+
+        btn_logout = tk.Button(
+
+            badge,
+
+            text="Sair",
+
+            command=self._init_login_ui,
+
+            bg="#FCE8E6",
+
+            fg=self.danger_color,
+
+            activebackground="#F8D7DA",
+
+            activeforeground=self.danger_color,
+
+            font=("Segoe UI", 9, "bold"),
+
+            bd=0,
+
+            relief="flat",
+
+            cursor="hand2",
+
+            padx=10,
+
+            pady=4
+
+        )
+
+        btn_logout.pack(side="right", padx=(12, 0))
+
+
+
+        # Capsule Navbar (Pílula Flutuante de Navegação inspirada em TesteHTML)
+
+        nav_capsule_wrapper = tk.Frame(header_card, bg=self.surface_color)
+
+        nav_capsule_wrapper.pack(fill="x", pady=(14, 0))
+
+
+
+        capsule_frame = tk.Frame(
+
+            nav_capsule_wrapper,
+
+            bg=self.primary_soft,
+
+            padx=6,
+
+            pady=6,
+
+            highlightbackground=self.border_color,
+
+            highlightthickness=1,
+
+            bd=0
+
+        )
+
+        capsule_frame.pack(anchor="center")
+
+
+
+        self.nav_tabs = {}
+
+        tabs_data = [
+
+            ("ponto", "📊 Espelho de Ponto"),
+
+            ("justificativa", "📝 Justificativas RH"),
+
+            ("ia", "🤖 Assistente IA"),
+
+            ("config", "⚙️ Configurações")
+
+        ]
+
+
+
+        def _select_tab(key):
+
+            for t_key, btn in self.nav_tabs.items():
+
+                if t_key == key:
+
+                    btn.config(bg=self.primary_dark, fg="white", font=("Segoe UI", 10, "bold"))
+
+                else:
+
+                    btn.config(bg=self.primary_soft, fg=self.text_color, font=("Segoe UI", 10))
+
+            if key == "justificativa" and self.btn_justificativa["state"] != "disabled":
+
+                self._abrir_modal_justificativa()
+
+            elif key == "ia" and self.btn_ai["state"] != "disabled":
+
+                self._show_ai_analysis()
+
+            elif key == "config":
+
+                self._config_ai_key()
+
+
+
+        for t_key, label_text in tabs_data:
+
+            btn = tk.Button(
+
+                capsule_frame,
+
+                text=label_text,
+
+                command=lambda k=t_key: _select_tab(k),
+
+                bg=self.primary_dark if t_key == "ponto" else self.primary_soft,
+
+                fg="white" if t_key == "ponto" else self.text_color,
+
+                activebackground=self.primary_color,
+
+                activeforeground="white",
+
+                font=("Segoe UI", 10, "bold" if t_key == "ponto" else "normal"),
+
+                bd=0,
+
+                relief="flat",
+
+                cursor="hand2",
+
+                padx=16,
+
+                pady=6
+
+            )
+
+            btn.pack(side="left", padx=3)
+
+            self.nav_tabs[t_key] = btn
+
+
+
+        # Painel de 2 Mini-Cards de Estatísticas (Saldo Acumulado, Pendências)
+
+        metrics_frame = tk.Frame(shell, bg=self.bg_color)
+
+        metrics_frame.pack(fill="x", pady=(0, 14))
+
+
+
+        card_saldo = tk.Frame(metrics_frame, bg=self.surface_color, padx=16, pady=12, highlightbackground=self.border_color, highlightthickness=1)
+
+        card_saldo.pack(side="left", fill="both", expand=True, padx=(0, 8))
+
+
+
+        tk.Label(card_saldo, text="⚖️ Saldo Acumulado", bg=self.surface_color, fg=self.muted_text_color, font=("Segoe UI", 9, "bold")).pack(anchor="w")
+
+        self.lbl_metric_saldo = tk.Label(card_saldo, text="+00:00", bg=self.surface_color, fg=self.primary_dark, font=("Segoe UI", 16, "bold"))
+
+        self.lbl_metric_saldo.pack(anchor="w", pady=(4, 0))
+
+
+
+        card_pend = tk.Frame(metrics_frame, bg=self.surface_color, padx=16, pady=12, highlightbackground=self.border_color, highlightthickness=1)
+
+        card_pend.pack(side="left", fill="both", expand=True, padx=(4, 0))
+
+
+
+        tk.Label(card_pend, text="⚠️ Pendências / Batidas", bg=self.surface_color, fg=self.muted_text_color, font=("Segoe UI", 9, "bold")).pack(anchor="w")
+
+        self.lbl_metric_pendencias = tk.Label(card_pend, text="0 pendências", bg=self.surface_color, fg=self.danger_color, font=("Segoe UI", 16, "bold"))
+
+        self.lbl_metric_pendencias.pack(anchor="w", pady=(4, 0))
 
 
 
@@ -2091,33 +2365,35 @@ class AppPonto(tk.Tk):
 
 
 
-        self.btn_recalc = ttk.Button(action_buttons, text="Recalcular Ponto", command=self._recalculate_tree_totals, state="disabled")
+        # Botão Principal em Destaque Guiado
+
+        self.btn_justificativa = ttk.Button(action_buttons, text="📝 Justificar Ponto para RH", command=self._abrir_modal_justificativa, state="disabled")
+
+        self.btn_justificativa.pack(side="left", padx=(0, 8))
+
+
+
+        self.btn_recalc = ttk.Button(action_buttons, text="🔄 Recalcular Ponto", command=self._recalculate_tree_totals, state="disabled")
 
         self.btn_recalc.pack(side="left", padx=(0, 8))
 
 
 
-        self.btn_export = ttk.Button(action_buttons, text="Exportar Excel", command=self._export_excel, state="disabled")
+        self.btn_export = ttk.Button(action_buttons, text="📊 Exportar Excel", command=self._export_excel, state="disabled")
 
         self.btn_export.pack(side="left", padx=(0, 8))
 
 
 
-        self.btn_ai = ttk.Button(action_buttons, text="Análise por IA", command=self._show_ai_analysis, state="disabled")
+        self.btn_ai = ttk.Button(action_buttons, text="🤖 Análise por IA", command=self._show_ai_analysis, state="disabled")
 
         self.btn_ai.pack(side="left", padx=(0, 8))
 
 
 
-        self.btn_key = ttk.Button(action_buttons, text="Chave IA", command=self._config_ai_key)
+        self.btn_key = ttk.Button(action_buttons, text="⚙️ Chave IA", command=self._config_ai_key)
 
-        self.btn_key.pack(side="left", padx=(0, 8))
-
-
-
-        self.btn_justificativa = ttk.Button(action_buttons, text="Enviar Justificativa RH", command=self._abrir_modal_justificativa, state="disabled")
-
-        self.btn_justificativa.pack(side="left")
+        self.btn_key.pack(side="left")
 
 
 
@@ -2217,13 +2493,13 @@ class AppPonto(tk.Tk):
 
         column_widths = {
 
-            "Sel": 45, "Data": 105, "E1": 70, "S1": 70, "E2": 70, "S2": 70, "E3": 70, "S3": 70,
+            "Sel": 80, "Data": 105, "E1": 70, "S1": 70, "E2": 70, "S2": 70, "E3": 70, "S3": 70,
 
             "Total": 85, "Saldo": 85, "Obs": 180
 
         }
 
-        self.var_main_sel_all = True
+        self.var_main_sel_all = False
 
 
 
@@ -2251,13 +2527,13 @@ class AppPonto(tk.Tk):
 
             if c == "Sel":
 
-                self.tree.heading(c, text="Sel [☑]", command=_toggle_sel_all_main, anchor="center")
+                self.tree.heading(c, text="Sel [☐]", command=_toggle_sel_all_main, anchor="center")
 
             else:
 
                 self.tree.heading(c, text=c, anchor="center")
 
-            self.tree.column(c, width=column_widths.get(c, 80), minwidth=40 if c == "Sel" else 50, stretch=False, anchor="center")
+            self.tree.column(c, width=column_widths.get(c, 80), minwidth=70 if c == "Sel" else 50, stretch=False, anchor="center")
 
 
 
@@ -2303,15 +2579,15 @@ class AppPonto(tk.Tk):
 
 
 
-        self.tree.tag_configure("positive", foreground=self.primary_dark, font=("Segoe UI", 10, "bold"))
+        self.tree.tag_configure("positive", background="#E6F4EA", foreground="#1E7E34", font=("Segoe UI", 10, "bold"))
 
-        self.tree.tag_configure("negative", foreground=self.danger_color, font=("Segoe UI", 10, "bold"))
+        self.tree.tag_configure("negative", background="#FCE8E6", foreground="#C5221F", font=("Segoe UI", 10, "bold"))
 
-        self.tree.tag_configure("missing", background=self.warning_bg, foreground=self.danger_color)
+        self.tree.tag_configure("missing", background="#FEF7E0", foreground="#B06000", font=("Segoe UI", 10, "bold"))
 
-        self.tree.tag_configure("in_progress", background="#E2EFDA", foreground="#375623")
+        self.tree.tag_configure("in_progress", background="#E8F0FE", foreground="#1A73E8", font=("Segoe UI", 10))
 
-        self.tree.tag_configure("normal", foreground=self.text_color)
+        self.tree.tag_configure("normal", background="#FFFFFF", foreground=self.text_color)
 
 
 
@@ -2529,13 +2805,13 @@ class AppPonto(tk.Tk):
 
         
 
-        self.var_main_sel_all = True
+        self.var_main_sel_all = False
 
 
 
         def _toggle_sel_all_main():
 
-            self.var_main_sel_all = not getattr(self, "var_main_sel_all", True)
+            self.var_main_sel_all = not getattr(self, "var_main_sel_all", False)
 
             mark = "[☑]" if self.var_main_sel_all else "[☐]"
 
@@ -2557,9 +2833,9 @@ class AppPonto(tk.Tk):
 
             if c == "Sel":
 
-                self.tree.heading(c, text="Sel [☑]", command=_toggle_sel_all_main, anchor="center")
+                self.tree.heading(c, text="Sel [☐]", command=_toggle_sel_all_main, anchor="center")
 
-                self.tree.column(c, width=45, minwidth=40, stretch=False, anchor="center")
+                self.tree.column(c, width=80, minwidth=70, stretch=False, anchor="center")
 
             elif c == "Data":
 
@@ -2625,9 +2901,7 @@ class AppPonto(tk.Tk):
 
                 
 
-            tem_ajuste = bool(obs_str or any([p for p in punches if p]))
-
-            sel_str = "[☑]" if tem_ajuste else "[☐]"
+            sel_str = "[☐]"
 
             row_vals = [sel_str, m.data_formatada] + punches + [total_str, saldo_str, obs_str]
 
@@ -2647,6 +2921,14 @@ class AppPonto(tk.Tk):
 
             
 
+            total_trabalhado_seg = sum([
+
+                0 if (m.data_formatada == today_str and ignore_today) else m.segundos_trabalhados
+
+                for m in data
+
+            ])
+
             total_saldo_seg = sum([
 
                 0 if (m.data_formatada == today_str and ignore_today) else m.saldo_segundos 
@@ -2654,6 +2936,42 @@ class AppPonto(tk.Tk):
                 for m in data
 
             ])
+
+            num_pendencias = sum([
+
+                1 for m in data
+
+                if m.is_pendencia and not (m.data_formatada == today_str and ignore_today)
+
+            ])
+
+
+
+            if hasattr(self, "lbl_metric_total"):
+
+                tot_str = self.exporter.format_time(total_trabalhado_seg)
+
+                self.lbl_metric_total.config(text=f"{tot_str}h")
+
+            if hasattr(self, "lbl_metric_saldo"):
+
+                saldo_str = self.exporter.format_time(total_saldo_seg, True)
+
+                color = self.primary_dark if total_saldo_seg >= 0 else self.danger_color
+
+                self.lbl_metric_saldo.config(text=saldo_str, fg=color)
+
+            if hasattr(self, "lbl_metric_pendencias"):
+
+                self.lbl_metric_pendencias.config(
+
+                    text=f"{num_pendencias} pendências" if num_pendencias != 1 else "1 pendência",
+
+                    fg=self.danger_color if num_pendencias > 0 else self.primary_dark
+
+                )
+
+
 
             total_dias = len(data)
 
@@ -2794,6 +3112,50 @@ class AppPonto(tk.Tk):
                     
 
             self.processed_data = new_processed
+
+            
+
+            total_trabalhado_seg = sum([
+
+                0 if (m.data_formatada == today_str and ignore_today) else m.segundos_trabalhados
+
+                for m in new_processed
+
+            ])
+
+            num_pendencias = sum([
+
+                1 for m in new_processed
+
+                if m.is_pendencia and not (m.data_formatada == today_str and ignore_today)
+
+            ])
+
+
+
+            if hasattr(self, "lbl_metric_total"):
+
+                tot_str = self.exporter.format_time(total_trabalhado_seg)
+
+                self.lbl_metric_total.config(text=f"{tot_str}h")
+
+            if hasattr(self, "lbl_metric_saldo"):
+
+                saldo_str = self.exporter.format_time(total_saldo_seg, True)
+
+                color = self.primary_dark if total_saldo_seg >= 0 else self.danger_color
+
+                self.lbl_metric_saldo.config(text=saldo_str, fg=color)
+
+            if hasattr(self, "lbl_metric_pendencias"):
+
+                self.lbl_metric_pendencias.config(
+
+                    text=f"{num_pendencias} pendências" if num_pendencias != 1 else "1 pendência",
+
+                    fg=self.danger_color if num_pendencias > 0 else self.primary_dark
+
+                )
 
             
 
