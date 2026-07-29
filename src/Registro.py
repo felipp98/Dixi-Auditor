@@ -3986,7 +3986,7 @@ class AppPonto(tk.Tk):
 
 
 
-                v_chk = tk.BooleanVar(value=tem_ajuste)
+                v_chk = tk.BooleanVar(value=False)
 
 
 
