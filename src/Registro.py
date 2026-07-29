@@ -3414,6 +3414,14 @@ class AppPonto(tk.Tk):
             saved_rh_y = safe_keyring_get("autentique_rh_y", "68")
             saved_rh_z = safe_keyring_get("autentique_rh_z", "1")
 
+            saved_extras_json = safe_keyring_get("extra_signatarios", "[]")
+            saved_extras = []
+            try:
+                if saved_extras_json:
+                    saved_extras = json.loads(saved_extras_json)
+            except Exception as ex_json:
+                logging.error(f"Erro ao carregar extra_signatarios: {ex_json}")
+
 
 
             dixi_srv = getattr(self, "service", None) or getattr(self, "dixi", None)
@@ -3746,6 +3754,15 @@ class AppPonto(tk.Tk):
 
             btn_add_extra = ttk.Button(sec_extras, text="➕ Adicionar Signatário Extra", command=lambda: adicionar_signatario_extra())
             btn_add_extra.pack(anchor="w", pady=(2, 0))
+
+            if saved_extras and isinstance(saved_extras, list):
+                for item_ex in saved_extras:
+                    if isinstance(item_ex, dict):
+                        adicionar_signatario_extra(
+                            nome=item_ex.get("nome", ""),
+                            email=item_ex.get("email", ""),
+                            papel=item_ex.get("papel", "Assinar")
+                        )
 
 
 
@@ -4471,8 +4488,17 @@ class AppPonto(tk.Tk):
                     keyring.set_password("DixiPontoApp", "rh_email", rh_email)
                     keyring.set_password("DixiPontoApp", "gestor_nome", gestor_nome)
                     keyring.set_password("DixiPontoApp", "rh_nome", rh_nome)
-                except Exception:
-                    pass
+
+                    extras_salvar = []
+                    for w_ex in lista_widgets_extras:
+                        ex_n = w_ex["nome"].get().strip()
+                        ex_e = w_ex["email"].get().strip()
+                        ex_p = w_ex["papel"].get()
+                        if ex_n or ex_e:
+                            extras_salvar.append({"nome": ex_n, "email": ex_e, "papel": ex_p})
+                    keyring.set_password("DixiPontoApp", "extra_signatarios", json.dumps(extras_salvar))
+                except Exception as ex_extras_save:
+                    logging.error(f"Erro ao salvar signatarios extras: {ex_extras_save}")
 
                 btn_autentique.config(state="disabled")
                 lbl_status.config(text="⏳ Gerando documento PDF e enviando para o Autentique...", foreground="#0284c7")
