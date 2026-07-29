@@ -927,9 +927,9 @@ class AppPonto(tk.Tk):
 
         self.surface_color = "#FFFFFF"
 
-        self.primary_color = "#ACC320"
+        self.primary_color = "#6ACC32"
 
-        self.primary_dark = "#8A9D18"
+        self.primary_dark = "#59AB2A"
 
         self.primary_soft = "#EFF7D9"
 
@@ -3361,9 +3361,9 @@ class AppPonto(tk.Tk):
 
         top = tk.Toplevel(self)
 
-        top.title("✍️ Enviar Justificativa de Ponto (Autentique / E-mail)")
+        top.title("Enviar Justificativa de Ponto (Autentique / E-mail)")
 
-        top.geometry("720x800")
+        top.geometry("720x720")
 
         top.minsize(680, 600)
 
