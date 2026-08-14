@@ -19,6 +19,7 @@ from src.config.constants import (
     ROLES_AUTENTIQUE_REVERSE
 )
 from src.utils.security import get_secure_credential
+from src.utils.colaboradores import buscar_dados_colaborador
 from src.ui.theme import get_font
 
 class SignerListManager(tk.Frame):
@@ -86,12 +87,24 @@ class SignerListManager(tk.Frame):
 
         colab_nome = get_secure_credential("colaborador_nome", "Colaborador")
         colab_email = get_secure_credential("colaborador_email", "")
+        if not colab_email or "@" not in colab_email:
+            cad_c = buscar_dados_colaborador(colab_nome)
+            if cad_c and cad_c.get("email"):
+                colab_email = cad_c.get("email")
 
         gestor_nome = get_secure_credential("gestor_nome", "Gestor Imediato")
         gestor_email = get_secure_credential("gestor_email", "")
+        if not gestor_email or "@" not in gestor_email:
+            cad_g = buscar_dados_colaborador(gestor_nome)
+            if cad_g and cad_g.get("email"):
+                gestor_email = cad_g.get("email")
 
         rh_nome = get_secure_credential("rh_nome", "Recursos Humanos")
         rh_email = get_secure_credential("rh_email", "")
+        if not rh_email or "@" not in rh_email:
+            cad_rh = buscar_dados_colaborador(rh_nome)
+            if cad_rh and cad_rh.get("email"):
+                rh_email = cad_rh.get("email")
 
         # Posições padrão para o layout oficial
         pos_preset = get_secure_credential("autentique_pos_preset", "Sobre a Linha Verde (Y: 68%)")

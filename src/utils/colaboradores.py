@@ -1,5 +1,5 @@
 """
-Gerenciamento e busca de cargos/funções dos colaboradores CLT cadastrados.
+Gerenciamento e busca de cargos/funções e e-mails dos colaboradores CLT cadastrados.
 """
 import os
 import json
@@ -42,10 +42,9 @@ def salvar_colaboradores(lista: List[Dict[str, str]]) -> bool:
         logger.error(f"Erro ao salvar colaboradores.json: {e}")
         return False
 
-def buscar_cargo_colaborador(identificador: str) -> Optional[str]:
+def buscar_dados_colaborador(identificador: str) -> Optional[Dict[str, str]]:
     """
-    Busca o cargo/função real de um colaborador por nome, e-mail ou username.
-    Exemplo: 'Felipp' -> 'RPA', 'Carla' -> 'Diretora ADM / Financeira (CFO)'.
+    Busca o cadastro completo de um colaborador (nome, cargo, email) por nome, e-mail ou username.
     """
     if not identificador or not identificador.strip():
         return None
@@ -53,24 +52,29 @@ def buscar_cargo_colaborador(identificador: str) -> Optional[str]:
     ident = identificador.lower().strip()
     colabs = carregar_colaboradores()
 
-    # 1. Match exato ou parcial por nome ou email
     for c in colabs:
         nome_c = str(c.get("nome", "")).lower().strip()
         email_c = str(c.get("email", "")).lower().strip()
-        cargo_c = str(c.get("cargo", "")).strip()
-
-        if not cargo_c:
-            continue
 
         if ident == nome_c or ident == email_c:
-            return cargo_c
+            return c
 
         # Checa se o primeiro nome bate (ex: "Felipp" em "Felipp Cordeiro")
         p_nome = nome_c.split()[0] if nome_c else ""
-        if p_nome and p_nome in ident:
-            return cargo_c
+        if p_nome and (p_nome == ident or p_nome in ident):
+            return c
 
-        if nome_c and nome_c in ident:
-            return cargo_c
+        if nome_c and (nome_c in ident or ident in nome_c):
+            return c
 
+    return None
+
+def buscar_cargo_colaborador(identificador: str) -> Optional[str]:
+    """
+    Busca o cargo/função real de um colaborador por nome, e-mail ou username.
+    Exemplo: 'Felipp' -> 'RPA', 'Carla' -> 'Diretora ADM / Financeira (CFO)'.
+    """
+    dados = buscar_dados_colaborador(identificador)
+    if dados and dados.get("cargo"):
+        return dados.get("cargo")
     return None

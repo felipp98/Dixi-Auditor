@@ -6,7 +6,7 @@ import requests
 from typing import List, Dict, Optional, Tuple
 from src.core.models import Usuario
 from src.utils.security import set_secure_credential
-from src.utils.colaboradores import buscar_cargo_colaborador
+from src.utils.colaboradores import buscar_cargo_colaborador, buscar_dados_colaborador
 
 logger = logging.getLogger(__name__)
 
@@ -49,11 +49,13 @@ class DixiService:
                 self.user_cargo = func_info.get("descricaoCargo") or func_info.get("cargo") or "Colaborador"
                 self.user_email = func_info.get("email") or user_obj.get("email") or user
 
-                # Busca o cargo real pelo Organograma se vier genérico ou vazio
-                if not self.user_cargo or self.user_cargo.lower() == "colaborador":
-                    real_cargo = buscar_cargo_colaborador(self.user_name or user)
-                    if real_cargo:
-                        self.user_cargo = real_cargo
+                # Busca cargo e e-mail corporativo cadastrados no Organograma / colaboradores.json
+                dados_cad = buscar_dados_colaborador(self.user_name or user)
+                if dados_cad:
+                    if not self.user_cargo or self.user_cargo.lower() == "colaborador":
+                        self.user_cargo = dados_cad.get("cargo") or self.user_cargo
+                    if not self.user_email or "@" not in self.user_email:
+                        self.user_email = dados_cad.get("email") or self.user_email
 
                 self.session.headers.update({"Authorization": f"bearer {self.token}"})
 
