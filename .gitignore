@@ -14,6 +14,16 @@ dist/
 *.db
 *.exe
 
+# Temporary & Scratch files
+scratch_*.py
+temp_*.py
+*.tmp
+*.log
+dixi_auditor.log
+
+# Generated application files (Excel outputs and exports)
+*.xlsx
+
 # Operating System Files
 Thumbs.db
 ehthumbs.db
@@ -27,13 +37,13 @@ env/
 ENV/
 .env
 
-# Generated application files (Excel outputs and Logs)
-*.xlsx
-*.log
-
-# Icons and Images (Private assets)
+# Images (Allow project assets)
 *.ico
 *.png
+!assets/**/*.ico
+!assets/**/*.png
+!assets/**/*.svg
+!assets/**/*.jpg
 
 # IDEs and editors
 .idea/

@@ -1,0 +1,11 @@
+    {                                                                                                                                                                                                        
+      "mcpServers": {                                                                                                                                                                                        
+        "Autentique-Docs": {                                                                                                                                                                                 
+          "url": "https://docs.autentique.com.br/api/~gitbook/mcp",                                                                                                                                          
+          "type": "sse",                                                                                                                                                                                     
+          "env": {                                                                                                                                                                                           
+            "AUTENTIQUE_TOKEN": "49f8f521379b76e569b44625b38b40a2e392cee81c924596b2813d839cf09113"                                                                                                           
+          }                                                                                                                                                                                                  
+        }                                                                                                                                                                                                    
+      }                                                                                                                                                                                                      
+    } 
