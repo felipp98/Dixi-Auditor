@@ -14,6 +14,13 @@ dist/
 *.db
 *.exe
 
+# Dados sensíveis e cadastros locais (Não subir para o GitHub)
+colaboradores.json
+src/config/colaboradores.json
+*.cache.json
+cache_*.json
+.autentique/
+
 # Temporary & Scratch files
 scratch_*.py
 temp_*.py
