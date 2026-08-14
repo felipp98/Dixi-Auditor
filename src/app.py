@@ -151,8 +151,6 @@ class App(tk.Tk):
             self.app_state.ignorar_hoje = ign_hoje
             self.app_state.set_marcacoes(marcacoes_salvas)
             main_view.set_period_dates(dt_ini, dt_fim, ign_hoje)
-            if tot_editados > 0:
-                self.app_state.marcar_edicao_feita()
 
     def handle_login(self, user: str, pwd: str):
         """Executa a autenticação assíncrona na Dixi."""
@@ -197,13 +195,17 @@ class App(tk.Tk):
             self.app_state.data_inicio = f"{start_date[6:]}/{start_date[4:6]}/{start_date[:4]}" if len(start_date) == 8 else start_date
             self.app_state.data_fim = f"{end_date[6:]}/{end_date[4:6]}/{end_date[:4]}" if len(end_date) == 8 else end_date
 
-            # Verifica se há dias editados previamente na memória atual
-            dias_editados_atuais = self.app_state.obter_dias_editados()
+            # Verifica se há dias editados na memória atual ou no cache salvo
+            dias_editados_candidatos = self.app_state.obter_dias_editados()
+            if not dias_editados_candidatos and self.app_state.usuario and self.app_state.usuario.username:
+                cached_s = StorageService.carregar_sessao(self.app_state.usuario.username)
+                if cached_s:
+                    dias_editados_candidatos = [m for m in cached_s.get("marcacoes", []) if m.editado_manualmente]
 
-            if dias_editados_atuais:
+            if dias_editados_candidatos:
                 # Checa se algum dia editado coincide com os dias retornados pela Dixi
                 dias_sobrepostos = [
-                    m for m in dias_editados_atuais
+                    m for m in dias_editados_candidatos
                     if any(normalize_date_to_iso(m.data_id or m.data_formatada) == normalize_date_to_iso(d.data_id or d.data_formatada) for d in marcacoes_dixi)
                 ]
 
@@ -217,9 +219,8 @@ class App(tk.Tk):
                     )
 
                     if manter:
-                        marcacoes_finais, pres_count = StorageService.mesclar_marcacoes(self.app_state.marcacoes, marcacoes_dixi)
+                        marcacoes_finais, pres_count = StorageService.mesclar_marcacoes(dias_editados_candidatos, marcacoes_dixi)
                         self.app_state.set_marcacoes(marcacoes_finais)
-                        self.app_state.marcar_edicao_feita()  # Habilita 'Recalcular Ponto'
                         messagebox.showinfo("Dados Mesclados", f"{pres_count} dia(s) com alterações manuais foram mantidos e os demais foram atualizados da Dixi.")
                     else:
                         self.app_state.set_marcacoes(marcacoes_dixi)
