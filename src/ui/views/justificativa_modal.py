@@ -1,51 +1,51 @@
 """
-Tela e Gerenciador de Justificativas de Ponto para envio ao RH e Autentique com Signatários e Testemunhas.
+Visualização da Aba de Justificativas RH com geração semanal de PDFs e envio ao Autentique com Signatários e Testemunhas.
 """
 import os
 import logging
 import tkinter as tk
 from tkinter import ttk, messagebox
 from datetime import datetime
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Tuple
 
-from src.core.models import MarcacaoDia, Signatario
 from src.core.state import AppState
-from src.ui.components.signer_list import SignerListManager
+from src.core.models import MarcacaoDia, Signatario
 from src.services.justificativa_service import gerar_pdf_justificativa
 from src.services.autentique_service import enviar_justificativa_autentique
 from src.utils.security import get_secure_credential
-from src.utils.colaboradores import buscar_cargo_colaborador
 from src.utils.formatters import get_dia_semana_nome, normalize_date_to_iso
+from src.utils.colaboradores import buscar_cargo_colaborador
 from src.utils.threading_utils import run_async_task
+from src.ui.components.signer_list import SignerListManager
+from src.ui.theme import get_font
 from src.config.constants import (
     COLOR_SURFACE,
+    COLOR_BG,
     COLOR_BORDER,
     COLOR_PRIMARY,
     COLOR_PRIMARY_DARK,
-    COLOR_PRIMARY_SOFT,
     COLOR_TEXT,
     COLOR_TEXT_MUTED
 )
-from src.ui.theme import get_font
 
 logger = logging.getLogger(__name__)
 
 class JustificativaView(tk.Frame):
-    """Visualização e orquestrador de Justificativas de Ponto e assinaturas digitais."""
+    """Painel de justificativa de ponto com agrupamento semanal e assinatura digital."""
 
     def __init__(self, parent, app_state: AppState):
-        super().__init__(parent, bg=COLOR_SURFACE)
+        super().__init__(parent, bg=COLOR_BG)
         self.app_state = app_state
         self._build_ui()
 
     def _build_ui(self):
-        # 1. Cabeçalho Informativo
-        hdr = tk.Frame(self, bg=COLOR_SURFACE, padx=18, pady=12, highlightbackground=COLOR_BORDER, highlightthickness=1)
+        # 1. Cabeçalho
+        hdr = tk.Frame(self, bg=COLOR_SURFACE, padx=16, pady=12, highlightbackground=COLOR_BORDER, highlightthickness=1)
         hdr.pack(fill="x", pady=(0, 10))
 
         tk.Label(
             hdr,
-            text="📝 Central de Justificativas de Ponto para RH",
+            text="📝 Formulário de Justificativa de Ponto (RH / Autentique)",
             bg=COLOR_SURFACE,
             fg=COLOR_PRIMARY_DARK,
             font=get_font(12, bold=True)
@@ -53,7 +53,7 @@ class JustificativaView(tk.Frame):
 
         tk.Label(
             hdr,
-            text="Selecione os dias, configure as batidas propostas, adicione signatários/testemunhas e gere o PDF ou envie ao Autentique.",
+            text="Selecione os dias, configure as batidas propostas, ajuste os signatários/testemunhas e gere o PDF ou envie ao Autentique.",
             bg=COLOR_SURFACE,
             fg=COLOR_TEXT_MUTED,
             font=get_font(9)
@@ -76,7 +76,7 @@ class JustificativaView(tk.Frame):
         table_card.pack(fill="both", expand=True, pady=(0, 10))
 
         cols = ("sel", "data", "dia_sem", "batidas_orig", "batidas_prop", "motivo")
-        self.tree = ttk.Treeview(table_card, columns=cols, show="headings", height=6, selectmode="browse")
+        self.tree = ttk.Treeview(table_card, columns=cols, show="headings", height=5, selectmode="browse")
         self.tree.heading("sel", text="Sel")
         self.tree.heading("data", text="Data")
         self.tree.heading("dia_sem", text="Dia da Semana")
@@ -100,7 +100,7 @@ class JustificativaView(tk.Frame):
         self.tree.bind("<Button-1>", self._on_click_row)
         self.tree.bind("<Double-1>", self._on_double_click_row)
 
-        # 4. Gerenciador de Signatários & Testemunhas
+        # 4. Gerenciador de Signatários & Testemunhas Expandido
         self.signer_manager = SignerListManager(self)
         self.signer_manager.pack(fill="x", pady=(0, 10))
 
@@ -160,8 +160,8 @@ class JustificativaView(tk.Frame):
             if has_checked_selection:
                 is_sel = "[☑]" if m.selecionado else "[☐]"
             else:
-                # Pré-marca dias com pendência ou saldo negativo
-                is_sel = "[☑]" if (m.is_pendencia or m.saldo_segundos < 0 or m.obs) else "[☐]"
+                # Pré-marca dias com pendência ou saldo negativo ou editados
+                is_sel = "[☑]" if (m.is_pendencia or m.saldo_segundos < 0 or m.obs or m.editado_manualmente) else "[☐]"
 
             prop_sugestao = batidas_orig if punches else "08:00 12:00 13:00 17:00"
             motivo_def = m.obs or "Ajuste de batida de ponto"
@@ -174,6 +174,7 @@ class JustificativaView(tk.Frame):
             )
 
         self._atualizar_contador()
+        self.signer_manager.load_defaults_from_settings()
 
     def _toggle_all(self, mark: bool):
         val = "[☑]" if mark else "[☐]"
@@ -275,11 +276,12 @@ class JustificativaView(tk.Frame):
             messagebox.showwarning("Aviso", "Selecione ao menos 1 dia para gerar a justificativa.")
             return
 
-        colab_nome = get_secure_credential("colaborador_nome", "Colaborador")
+        colab_nome = self.signer_manager.ent_colab_nome.get().strip() or get_secure_credential("colaborador_nome", "Colaborador")
         colab_cargo = get_secure_credential("colaborador_cargo", "")
         if not colab_cargo or colab_cargo.lower() == "colaborador":
             colab_cargo = buscar_cargo_colaborador(colab_nome) or colab_cargo or "CLT"
-        gestor_nome = get_secure_credential("gestor_nome", "Gestor Imediato")
+
+        gestor_nome = self.signer_manager.cb_gestor_nome.get().strip() or get_secure_credential("gestor_nome", "Gestor Imediato")
         rh_nome = get_secure_credential("rh_nome", "Recursos Humanos")
         obs_geral = self.txt_obs.get("1.0", "end").strip()
 
@@ -333,16 +335,17 @@ class JustificativaView(tk.Frame):
             messagebox.showwarning("Token Ausente", "Token do Autentique não configurado. Por favor, cadastre o Token em '⚙️ Configurações'.")
             return
 
-        signatarios = self.signer_manager.get_signatarios()
+        signatarios = self.signer_manager.get_signers()
         if not signatarios:
-            messagebox.showwarning("Signatários Ausentes", "Adicione ao menos um signatário na seção '👥 Signatários & Testemunhas'.")
+            messagebox.showwarning("Signatários Ausentes", "Informe o e-mail do colaborador e do gestor na seção '👥 Signatários & Testemunhas'.")
             return
 
-        colab_nome = get_secure_credential("colaborador_nome", "Colaborador")
+        colab_nome = self.signer_manager.ent_colab_nome.get().strip() or get_secure_credential("colaborador_nome", "Colaborador")
         colab_cargo = get_secure_credential("colaborador_cargo", "")
         if not colab_cargo or colab_cargo.lower() == "colaborador":
             colab_cargo = buscar_cargo_colaborador(colab_nome) or colab_cargo or "CLT"
-        gestor_nome = get_secure_credential("gestor_nome", "Gestor Imediato")
+
+        gestor_nome = self.signer_manager.cb_gestor_nome.get().strip() or get_secure_credential("gestor_nome", "Gestor Imediato")
         rh_nome = get_secure_credential("rh_nome", "Recursos Humanos")
         obs_geral = self.txt_obs.get("1.0", "end").strip()
 
@@ -378,7 +381,7 @@ class JustificativaView(tk.Frame):
         def on_success(resultados):
             self.btn_send_autentique.config(state="normal")
             self.lbl_status.config(text=f"✅ {len(resultados)} documento(s) enviado(s) com sucesso para o Autentique!", foreground="#16a34a")
-            messagebox.showinfo("Sucesso", f"Justificativa(s) enviada(s) para assinatura de todos os signatários e testemunhas!")
+            messagebox.showinfo("Sucesso", f"Justificativa(s) enviada(s) com sucesso para assinatura de todos os signatários e testemunhas cadastrados!")
 
         def on_error(err):
             self.btn_send_autentique.config(state="normal")

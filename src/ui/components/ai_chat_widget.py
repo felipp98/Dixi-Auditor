@@ -30,10 +30,17 @@ class AIChatModal(tk.Toplevel):
     ):
         super().__init__(parent)
         self.title("🤖 Assistente IA de Ponto (Nemotron 550B Reasoning)")
-        self.geometry("680x560")
-        self.minsize(580, 480)
+        self.minsize(680, 500)
         self.configure(bg=COLOR_BG)
         self.transient(parent)
+
+        # Centraliza a janela 800x600 na tela
+        w, h = 800, 600
+        ws = self.winfo_screenwidth()
+        hs = self.winfo_screenheight()
+        x = max(0, (ws // 2) - (w // 2))
+        y = max(0, (hs // 2) - (h // 2))
+        self.geometry(f"{w}x{h}+{x}+{y}")
 
         self.on_send_message = on_send_message
         self.on_quick_audit = on_quick_audit

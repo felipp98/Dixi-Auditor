@@ -5,7 +5,7 @@ project_root = os.path.abspath(os.path.join(SPECPATH, ".."))
 
 a = Analysis(
     [os.path.join(project_root, 'src', 'Registro.py')],
-    pathex=[],
+    pathex=[project_root],
     binaries=[],
     datas=[(os.path.join(project_root, 'assets', 'images'), 'assets/images')],
     hiddenimports=[],

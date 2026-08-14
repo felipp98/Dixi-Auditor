@@ -3,6 +3,13 @@ Controlador Principal da Aplicação (AppController).
 Orquestra o ciclo de vida do Tkinter, navegação de telas, restauração de sessões e comunicação com os serviços.
 """
 import os
+import sys
+
+# Garante que a raiz do projeto esteja no sys.path para resolução do pacote 'src'
+_PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+if _PROJECT_ROOT not in sys.path:
+    sys.path.insert(0, _PROJECT_ROOT)
+
 import logging
 import tkinter as tk
 from tkinter import messagebox
@@ -113,7 +120,8 @@ class App(tk.Tk):
 
         # Verifica se existe sessão salva para o usuário logado
         if self.app_state.usuario and self.app_state.usuario.username:
-            self._verificar_restauracao_sessao(self.app_state.usuario.username, main_v)
+            u_name = self.app_state.usuario.username
+            self.after(200, lambda: self._verificar_restauracao_sessao(u_name, main_v))
 
     def _verificar_restauracao_sessao(self, username: str, main_view: MainView):
         """Pergunta ao usuário se deseja restaurar os dados salvos da última sessão."""
