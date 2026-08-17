@@ -295,8 +295,10 @@ class MainView(tk.Frame):
             self.card_pend.set_value(f"{resumo.dias_pendencia} pendência(s)")
 
     def _on_table_edit(self):
-        """Chamado quando uma batida é alterada na tabela: Habilita 'Recalcular Ponto'."""
+        """Chamado quando uma batida é alterada na tabela: Habilita 'Recalcular Ponto' e persiste no histórico."""
+        self.app_state.marcacoes = self.table.get_all_rows_as_marcacoes()
         self.app_state.marcar_edicao_feita()
+        self.app_state.salvar_edicoes_no_historico()
 
     def _on_table_selection_change(self, count: int):
         pass
@@ -305,6 +307,20 @@ class MainView(tk.Frame):
         self.app_state.set_ignorar_hoje(self.var_ignorar_hoje.get())
 
     def _trigger_fetch_ponto(self):
+        # Se houver edições manuais na tela atual, pergunta se o usuário deseja salvá-las no histórico
+        dias_editados = self.app_state.obter_dias_editados()
+        if dias_editados:
+            salvar = messagebox.askyesno(
+                "Salvar Histórico da Edição?",
+                f"Você realizou alterações em {len(dias_editados)} dia(s) no período atual ({self.app_state.data_inicio} até {self.app_state.data_fim}).\n\n"
+                "Deseja salvar o histórico dessas alterações antes de visualizar o novo período?\n\n"
+                "• Sim: Guarda suas alterações no histórico para você não precisar refazer depois.\n"
+                "• Não: Descarta as alterações deste período e avança.",
+                parent=self
+            )
+            if salvar:
+                self.app_state.salvar_edicoes_no_historico()
+
         start_iso = self.cal_inicio.get_date_str_iso()
         end_iso = self.cal_fim.get_date_str_iso()
         self.btn_buscar.config(state="disabled", text="⏳ Buscando...")
@@ -318,11 +334,21 @@ class MainView(tk.Frame):
         novas_marcacoes = self.table.get_all_rows_as_marcacoes()
         self.app_state.set_marcacoes(novas_marcacoes)
         self.app_state.marcar_recalculo_concluido()
-        messagebox.showinfo("Recalculado", "Ponto recalculado com sucesso!")
+        self.btn_recalc.config(state="disabled")
+        messagebox.showinfo("Recalculado", "Ponto recalculado com sucesso!", parent=self)
 
     def _export_excel(self):
         if not self.app_state.marcacoes:
-            messagebox.showwarning("Aviso", "Não há dados para exportar.")
+            messagebox.showwarning("Aviso", "Não há dados para exportar.", parent=self)
+            return
+
+        if self.app_state.has_unsaved_edits:
+            messagebox.showwarning(
+                "Recálculo Pendente",
+                "Existem alterações na tabela que ainda não foram recalculadas.\n\n"
+                "Por favor, clique no botão '🔄 Recalcular Ponto' antes de exportar para o Excel.",
+                parent=self
+            )
             return
 
         file_path = filedialog.asksaveasfilename(
@@ -335,13 +361,13 @@ class MainView(tk.Frame):
 
         try:
             ExcelService.generate(self.app_state.marcacoes, file_path, self.app_state.ignorar_hoje)
-            messagebox.showinfo("Sucesso", f"Planilha exportada com sucesso em:\n{file_path}")
+            messagebox.showinfo("Sucesso", f"Planilha exportada com sucesso em:\n{file_path}", parent=self)
             try:
                 os.startfile(file_path)
             except Exception:
                 pass
         except Exception as e:
-            messagebox.showerror("Erro na Exportação", f"Falha ao gerar Excel:\n{e}")
+            messagebox.showerror("Erro na Exportação", f"Falha ao gerar Excel:\n{e}", parent=self)
 
     def select_tab(self, key: str):
         """Alterna a aba ativa da interface."""

@@ -33,9 +33,9 @@ import calendar
 
 from datetime import datetime
 
-from typing import List, Dict, Optional, Tuple
+from typing import List, Dict, Optional, Tuple, Any
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field, asdict
 
 
 
@@ -86,22 +86,43 @@ logging.basicConfig(
 # --- MODELOS DE DADOS ---
 
 @dataclass
-
 class MarcacaoDia:
-
     data_id: str  
-
     data_formatada: str
-
     segundos_trabalhados: int
-
     saldo_segundos: int
-
     is_pendencia: bool
-
     horarios: List[str]
-
     obs: str = ""
+    editado_manualmente: bool = False
+    horarios_originais: List[str] = field(default_factory=list)
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "data_id": self.data_id,
+            "data_formatada": self.data_formatada,
+            "segundos_trabalhados": self.segundos_trabalhados,
+            "saldo_segundos": self.saldo_segundos,
+            "is_pendencia": self.is_pendencia,
+            "horarios": list(self.horarios),
+            "obs": self.obs,
+            "editado_manualmente": self.editado_manualmente,
+            "horarios_originais": list(self.horarios_originais)
+        }
+
+    @classmethod
+    def from_dict(cls, d: Dict[str, Any]) -> "MarcacaoDia":
+        return cls(
+            data_id=str(d.get("data_id", "")),
+            data_formatada=str(d.get("data_formatada", "")),
+            segundos_trabalhados=int(d.get("segundos_trabalhados", 0)),
+            saldo_segundos=int(d.get("saldo_segundos", 0)),
+            is_pendencia=bool(d.get("is_pendencia", False)),
+            horarios=list(d.get("horarios", [])),
+            obs=str(d.get("obs", "")),
+            editado_manualmente=bool(d.get("editado_manualmente", False)),
+            horarios_originais=list(d.get("horarios_originais", []))
+        )
 
 
 
@@ -1886,26 +1907,17 @@ class AppPonto(tk.Tk):
 
 
     def _do_login(self):
-
-        u, p = self.ent_user.get(), self.ent_pass.get()
-
+        u, p = self.ent_user.get().strip(), self.ent_pass.get()
+        self.current_username = u
         self._set_login_button_state(True)
 
-        
-
         def run():
-
             if self.service.authenticate(u, p):
-
+                self.service.username = u
                 self.after(0, self._init_main_ui)
-
             else:
-
                 self.after(0, lambda: messagebox.showerror("Erro", "Falha no Login"))
-
                 self.after(0, lambda: self._set_login_button_state(False))
-
-        
 
         threading.Thread(target=run, daemon=True).start()
 
@@ -2396,212 +2408,338 @@ class AppPonto(tk.Tk):
 
 
         self.tree.tag_configure("positive", background="#E6F4EA", foreground="#1E7E34", font=("Segoe UI", 10, "bold"))
-
         self.tree.tag_configure("negative", background="#FCE8E6", foreground="#C5221F", font=("Segoe UI", 10, "bold"))
-
         self.tree.tag_configure("missing", background="#FEF7E0", foreground="#B06000", font=("Segoe UI", 10, "bold"))
-
         self.tree.tag_configure("in_progress", background="#E8F0FE", foreground="#1A73E8", font=("Segoe UI", 10))
-
+        self.tree.tag_configure("editado", background="#E6F4EA", foreground="#137333", font=("Segoe UI", 10, "bold"))
         self.tree.tag_configure("normal", background="#FFFFFF", foreground=self.text_color)
 
-
+        self.has_unsaved_edits = False
 
         self.lbl_status = tk.Label(
-
             table_frame,
-
             text="Dias carregados: 0 | Saldo Acumulado no Período: +00:00",
-
             bg=self.surface_color,
-
             fg=self.muted_text_color,
-
             font=("Segoe UI", 10, "italic"),
-
             anchor="w"
-
         )
-
         self.lbl_status.grid(row=2, column=0, columnspan=2, sticky="ew", pady=(8, 0))
 
-
-
-        # Widget Flutuante de Assistente Virtual (Inspirado nas Imagens 9 e 10)
-
+        # Widget Flutuante de Assistente Virtual
         self._setup_floating_ai_widget()
 
+        # Verifica se há sessão salva anteriormente para restaurar
+        self.after(300, self._check_restore_last_session)
 
+    def _get_cache_path(self) -> str:
+        app_data = os.path.join(os.path.expanduser("~"), ".dixi_auditor")
+        os.makedirs(app_data, exist_ok=True)
+        u = getattr(self.service, "user_name", None) or getattr(self, "current_username", "default_user")
+        clean_user = "".join(c for c in str(u) if c.isalnum() or c in ("_", "-")).lower() or "default_user"
+        return os.path.join(app_data, f"cache_{clean_user}.json")
+
+    def _salvar_edicoes_historico(self, marcacoes_editadas):
+        try:
+            cache_path = self._get_cache_path()
+            old_data = {}
+            if os.path.exists(cache_path):
+                try:
+                    with open(cache_path, "r", encoding="utf-8") as f:
+                        old_data = json.load(f)
+                except Exception:
+                    old_data = {}
+            hist = old_data.get("historico_edicoes", {}) or {}
+            for m in marcacoes_editadas:
+                if getattr(m, "editado_manualmente", False):
+                    hist[m.data_id] = m.to_dict() if hasattr(m, "to_dict") else {
+                        "data_id": m.data_id, "data_formatada": m.data_formatada,
+                        "segundos_trabalhados": m.segundos_trabalhados, "saldo_segundos": m.saldo_segundos,
+                        "is_pendencia": m.is_pendencia, "horarios": list(m.horarios), "obs": m.obs,
+                        "editado_manualmente": True, "horarios_originais": getattr(m, "horarios_originais", [])
+                    }
+            u = getattr(self, "current_username", None) or getattr(self.service, "username", None) or "default_user"
+            old_data["username"] = u
+            old_data["historico_edicoes"] = hist
+            old_data["timestamp_salvo"] = datetime.now().isoformat()
+            if hasattr(self, "cal_i") and hasattr(self, "cal_f"):
+                try:
+                    old_data["data_inicio"] = self.cal_i.get_date().strftime("%d/%m/%Y")
+                    old_data["data_fim"] = self.cal_f.get_date().strftime("%d/%m/%Y")
+                except Exception:
+                    pass
+            if getattr(self, "processed_data", None):
+                old_data["marcacoes"] = [m.to_dict() for m in self.processed_data]
+                old_data["total_editados"] = sum(1 for m in self.processed_data if getattr(m, "editado_manualmente", False))
+
+            with open(cache_path, "w", encoding="utf-8") as f:
+                json.dump(old_data, f, indent=2, ensure_ascii=False)
+            logging.info(f"Histórico de edições salvo com sucesso em: {cache_path}")
+            return True
+        except Exception as ex:
+            logging.error(f"Erro ao salvar histórico de edições: {ex}")
+            return False
+
+    def _obter_edicoes_historico(self) -> Dict[str, MarcacaoDia]:
+        try:
+            cache_path = self._get_cache_path()
+            if not os.path.exists(cache_path):
+                return {}
+            with open(cache_path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            hist = data.get("historico_edicoes", {}) or {}
+            res = {}
+            for k, v in hist.items():
+                if isinstance(v, dict):
+                    res[k] = MarcacaoDia.from_dict(v)
+            return res
+        except Exception as ex:
+            logging.error(f"Erro ao carregar histórico de edições: {ex}")
+            return {}
+
+    def _check_restore_last_session(self):
+        try:
+            cache_path = self._get_cache_path()
+            if not os.path.exists(cache_path):
+                return
+            with open(cache_path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            raw_marc = data.get("marcacoes", [])
+            if not raw_marc:
+                return
+            tot_editados = data.get("total_editados", 0)
+            dt_ini = data.get("data_inicio", "")
+            dt_fim = data.get("data_fim", "")
+            msg = (
+                f"Encontramos dados salvos da sua última sessão de trabalho:\n"
+                f"📅 Período: {dt_ini} até {dt_fim}\n"
+            )
+            if tot_editados > 0:
+                msg += f"✨ Com {tot_editados} dia(s) com alterações manuais salvas.\n\n"
+            else:
+                msg += f"📊 Com {len(raw_marc)} dia(s) carregados.\n\n"
+            msg += "Deseja recuperar a última edição que você fez nesta sessão?"
+            if messagebox.askyesno("Recuperar Última Edição?", msg, parent=self):
+                marcacoes_obj = [MarcacaoDia.from_dict(m) for m in raw_marc]
+                self.processed_data = marcacoes_obj
+                self._populate_table(marcacoes_obj)
+        except Exception as ex:
+            logging.error(f"Erro ao checar restauração de sessão: {ex}")
 
     def _on_toggle_ignore_today(self):
-
         if self.processed_data:
-
             self._refresh_main_table()
 
-
-
     def on_double_click(self, event):
-
         region = self.tree.identify("region", event.x, event.y)
-
         if region != "cell":
-
             return
-
-            
-
-        column = self.tree.identify_column(event.x)
 
         item = self.tree.identify_row(event.y)
-
-        
-
-        col_idx = int(column[1:]) - 1
-
-        col_name = self.cols[col_idx]
-
-        
-
-        if col_name in ["Sel", "Data", "TOTAL", "SALDO", "OBS"]:
-
+        if not item:
             return
 
-            
+        values = list(self.tree.item(item, "values"))
+        if not values:
+            return
 
-        x, y, width, height = self.tree.bbox(item, column)
+        data_str = str(values[0]).strip()
+        target_m = None
+        target_idx = -1
+        for idx, m in enumerate(self.processed_data):
+            if m.data_formatada == data_str:
+                target_m = m
+                target_idx = idx
+                break
 
-        
+        if not target_m:
+            return
 
-        entry = ttk.Entry(self.tree)
+        punches_str = " ".join([h for h in target_m.horarios if h and h != "--:--"])
+        current_obs = target_m.obs or ""
+        if current_obs in ["EM ANDAMENTO", "FALTA BATIDA", "PENDÊNCIA DE BATIDA"]:
+            current_obs = ""
 
-        entry.insert(0, self.tree.set(item, column))
-
-        entry.select_range(0, "end")
-
-        entry.focus_set()
-
-        entry.place(x=x, y=y, width=width, height=height)
-
-        
-
-        def save_edit(event=None):
-
-            new_val = entry.get().strip()
-
-            if new_val:
-
-                try:
-
-                    datetime.strptime(new_val, "%H:%M")
-
-                except ValueError:
-
-                    messagebox.showerror("Formato Inválido", "A hora deve estar no formato de 24h: HH:MM (ex: 08:30 ou 17:45).")
-
-                    entry.destroy()
-
-                    return
-
-            
-
-            self.tree.set(item, column, new_val)
-
-            entry.destroy()
-
-
-
-        def cancel_edit(event=None):
-
-            entry.destroy()
-
-
-
-        entry.bind("<Return>", save_edit)
-
-        entry.bind("<FocusOut>", save_edit)
-
-        entry.bind("<Escape>", cancel_edit)
-
-
-
-    def _fetch_and_display(self):
+        # Abre a caixinha modal de edição
+        ed_top = tk.Toplevel(self)
+        ed_top.title(f"Ajustar Ponto - {data_str}")
+        ed_top.geometry("500x300")
+        ed_top.minsize(450, 260)
+        ed_top.configure(bg=self.bg_color)
+        ed_top.transient(self)
+        ed_top.grab_set()
 
         try:
+            ed_top.update_idletasks()
+            w, h = 500, 300
+            x = max(0, (ed_top.winfo_screenwidth() - w) // 2)
+            y = max(0, (ed_top.winfo_screenheight() - h) // 2)
+            ed_top.geometry(f"{w}x{h}+{x}+{y}")
+        except Exception:
+            pass
 
+        card = tk.Frame(ed_top, bg=self.surface_color, padx=20, pady=18, highlightbackground=self.border_color, highlightthickness=1)
+        card.pack(fill="both", expand=True, padx=14, pady=14)
+
+        tk.Label(
+            card,
+            text=f"📅 Ajuste de Ponto: {data_str}",
+            bg=self.surface_color,
+            fg=self.primary_dark,
+            font=("Segoe UI", 12, "bold")
+        ).pack(anchor="w", pady=(0, 10))
+
+        tk.Label(
+            card,
+            text="Batidas / Horários (separados por espaço, ex: 08:00 12:00 13:00 17:00):",
+            bg=self.surface_color,
+            fg=self.text_color,
+            font=("Segoe UI", 9, "bold")
+        ).pack(anchor="w", pady=(0, 4))
+
+        ent_horarios = ttk.Entry(card, font=("Segoe UI", 10))
+        ent_horarios.insert(0, punches_str)
+        ent_horarios.pack(fill="x", pady=(0, 12))
+        ent_horarios.focus_set()
+
+        tk.Label(
+            card,
+            text="Motivo / Justificativa do Ajuste:",
+            bg=self.surface_color,
+            fg=self.text_color,
+            font=("Segoe UI", 9, "bold")
+        ).pack(anchor="w", pady=(0, 4))
+
+        ent_obs = ttk.Entry(card, font=("Segoe UI", 10))
+        ent_obs.insert(0, current_obs)
+        ent_obs.pack(fill="x", pady=(0, 16))
+
+        def salvar_ajuste():
+            raw_text = ent_horarios.get().strip()
+            obs_text = ent_obs.get().strip()
+
+            novos_horarios = []
+            if raw_text:
+                for token in raw_text.split():
+                    if re.match(r"^\d{1,2}:\d{2}$", token):
+                        partes = token.split(":")
+                        novos_horarios.append(f"{int(partes[0]):02d}:{partes[1]}")
+                    else:
+                        messagebox.showerror(
+                            "Horário Inválido",
+                            f"'{token}' não é um horário válido no formato HH:MM.",
+                            parent=ed_top
+                        )
+                        return
+
+            novos_horarios = sorted(novos_horarios)
+
+            if not getattr(target_m, "horarios_originais", None):
+                target_m.horarios_originais = list(target_m.horarios)
+
+            m_novo = PontoEngine.process_horarios(
+                novos_horarios,
+                target_m.data_id,
+                target_m.data_formatada,
+                obs=obs_text
+            )
+            m_novo.editado_manualmente = True
+            m_novo.horarios_originais = target_m.horarios_originais
+
+            self.processed_data[target_idx] = m_novo
+            self._salvar_edicoes_historico([m_novo])
+
+            self.has_unsaved_edits = True
+            self.btn_recalc.config(state="normal")
+            self._refresh_main_table()
+
+            ed_top.destroy()
+            messagebox.showinfo("Ajuste Salvo", f"Alteração salva no histórico para {data_str}!\nO botão '🔄 Recalcular Ponto' foi habilitado para atualizar o saldo.", parent=self)
+
+        btn_bar = tk.Frame(card, bg=self.surface_color)
+        btn_bar.pack(fill="x", pady=(8, 0))
+
+        ttk.Button(btn_bar, text="Cancelar", command=ed_top.destroy).pack(side="right", padx=(8, 0))
+        ttk.Button(btn_bar, text="💾 Salvar Alterações", command=salvar_ajuste).pack(side="right")
+        ed_top.bind("<Return>", lambda e: salvar_ajuste())
+        ed_top.bind("<Escape>", lambda e: ed_top.destroy())
+
+    def _fetch_and_display(self):
+        try:
             s = self.cal_i.get_date().strftime("%Y%m%d")
-
             e = self.cal_f.get_date().strftime("%Y%m%d")
-
         except ValueError as val_ex:
-
-            messagebox.showerror("Erro de Data", str(val_ex))
-
+            messagebox.showerror("Erro de Data", str(val_ex), parent=self)
             return
 
-        
+        # Verifica se há edições manuais no período atual para perguntar se deseja salvar antes de trocar
+        dias_editados = [m for m in getattr(self, "processed_data", []) if getattr(m, "editado_manualmente", False)]
+        if not dias_editados and getattr(self, "has_unsaved_edits", False) and getattr(self, "processed_data", []):
+            dias_editados = self.processed_data
 
+        if dias_editados:
+            salvar = messagebox.askyesno(
+                "Salvar Histórico da Edição?",
+                f"Você realizou alterações em dia(s) no período atual.\n\n"
+                "Deseja salvar o histórico dessas alterações antes de visualizar o novo período?\n\n"
+                "• Sim: Guarda suas alterações no histórico para você não precisar refazer depois.\n"
+                "• Não: Descarta as alterações deste período e avança.",
+                parent=self
+            )
+            if salvar:
+                self._salvar_edicoes_historico(dias_editados)
+        
         self.btn_buscar.config(state="disabled")
-
         self.btn_export.config(state="disabled")
-
         self.btn_recalc.config(state="disabled")
-
         if hasattr(self, "btn_ai") and self.btn_ai:
-
             self.btn_ai.config(state="disabled")
-
         
-
         for item in self.tree.get_children():
-
             self.tree.delete(item)
-
             
-
         self.lbl_status.config(text="Obtendo dados do espelho de ponto na Dixi...", foreground=self.primary_dark)
-
         
-
         def run():
-
             try:
-
                 raw = self.service.fetch_history(s, e)
-
                 if not raw:
-
-                    self.after(0, lambda: messagebox.showwarning("Aviso", "Nenhum dado de ponto encontrado para o período selecionado."))
-
+                    self.after(0, lambda: messagebox.showwarning("Aviso", "Nenhum dado de ponto encontrado para o período selecionado.", parent=self))
                     return
-
                 
-
                 processed = sorted(
-
                     [PontoEngine.process_day(d) for d in raw], 
-
                     key=lambda x: x.data_id
-
                 )
 
+                # Verifica se há edições salvas no histórico persistente para o período
+                hist_edicoes = self._obter_edicoes_historico()
+                if hist_edicoes:
+                    dias_salvos = [hist_edicoes[m.data_id] for m in processed if m.data_id in hist_edicoes]
+                    if dias_salvos:
+                        recuperar = messagebox.askyesno(
+                            "Restaurar Histórico de Edições?",
+                            f"Encontramos {len(dias_salvos)} dia(s) com alterações salvas no seu histórico para o período selecionado.\n\n"
+                            "Deseja RESTAURAR essas edições sobre os dados da Dixi?\n\n"
+                            "• Sim: Restaura seus horários e observações editados anteriormente.\n"
+                            "• Não: Carrega os dados originais limpos da Dixi.",
+                            parent=self
+                        )
+                        if recuperar:
+                            for idx, p in enumerate(processed):
+                                if p.data_id in hist_edicoes:
+                                    salvo = hist_edicoes[p.data_id]
+                                    salvo.horarios_originais = list(p.horarios)
+                                    processed[idx] = salvo
                 
-
                 self.processed_data = processed
-
+                self.has_unsaved_edits = False
                 self.after(0, lambda: self._populate_table(processed))
-
                 
-
             except Exception as ex:
-
-                self.after(0, lambda: messagebox.showerror("Erro", f"Erro ao buscar histórico:\n{ex}"))
-
+                self.after(0, lambda: messagebox.showerror("Erro", f"Erro ao buscar histórico:\n{ex}", parent=self))
             finally:
-
                 self.after(0, lambda: self.btn_buscar.config(state="normal"))
-
-        
 
         threading.Thread(target=run, daemon=True).start()
 
@@ -2646,58 +2784,38 @@ class AppPonto(tk.Tk):
         ignore_today = self.var_ignore_today.get()
 
         for m in data:
-
             is_today = (m.data_formatada == today_str) and ignore_today
-
             punches = (m.horarios + [""] * max_cols)[:max_cols]
-
             total_str = self.exporter.format_time(m.segundos_trabalhados)
 
-            if is_today:
-
-                saldo_str = "00:00"
-
-                obs_str = m.obs if m.obs else "EM ANDAMENTO"
-
-                tag = "in_progress"
-
-            else:
-
+            if getattr(m, "editado_manualmente", False):
                 saldo_str = self.exporter.format_time(m.saldo_segundos, True)
-
+                obs_str = m.obs if m.obs else "AJUSTADO MANUALMENTE"
+                tag = "editado"
+            elif is_today:
+                saldo_str = "00:00"
+                obs_str = m.obs if m.obs else "EM ANDAMENTO"
+                tag = "in_progress"
+            else:
+                saldo_str = self.exporter.format_time(m.saldo_segundos, True)
                 obs_str = m.obs if m.obs else ("FALTA BATIDA" if m.is_pendencia else "")
-
                 tag = "normal"
-
                 if m.is_pendencia:
-
                     tag = "missing"
-
                 elif m.saldo_segundos > 0:
-
                     tag = "positive"
-
                 elif m.saldo_segundos < 0:
-
                     tag = "negative"
 
             row_vals = [m.data_formatada] + punches + [total_str, saldo_str, obs_str]
-
             self.tree.insert("", "end", values=row_vals, tags=(tag,))
 
-
-            
-
         if data:
-
             self.btn_export.config(state="normal")
-
-            self.btn_recalc.config(state="normal")
-
+            recalc_state = "normal" if getattr(self, "has_unsaved_edits", False) else "disabled"
+            self.btn_recalc.config(state=recalc_state)
             if hasattr(self, "btn_ai") and self.btn_ai:
-
                 self.btn_ai.config(state="normal")
-
             self.btn_justificativa.config(state="normal")
 
             
@@ -2941,31 +3059,33 @@ class AppPonto(tk.Tk):
             
 
             saldo_acumulado = self.exporter.format_time(total_saldo_seg, True)
-
             status_text = f"🔄 Ponto Recalculado! Dias: {total_dias} | Saldo Acumulado: {saldo_acumulado}"
-
             if ignore_today and any(m.data_formatada == today_str for m in new_processed):
-
                 status_text += " (Dia atual desconsiderado)"
-
             self.lbl_status.config(text=status_text, foreground=self.primary_dark)
+
+            self.btn_recalc.config(state="disabled")
+            self.has_unsaved_edits = False
+            self._salvar_edicoes_historico(new_processed)
 
             messagebox.showinfo("Recálculo Concluído", f"Ponto recalculado com sucesso para {total_dias} dias!\n\nSaldo Acumulado no Período: {saldo_acumulado}", parent=self)
 
         except Exception as ex:
-
             logging.error(f"Erro ao recalcular ponto: {ex}")
-
             messagebox.showerror("Erro de Recálculo", f"Falha ao recalcular o ponto:\n{ex}", parent=self)
 
-
-
     def _export_excel(self):
-
         if not self.processed_data:
+            messagebox.showwarning("Aviso", "Nenhum dado carregado para exportação.", parent=self)
+            return
 
-            messagebox.showwarning("Aviso", "Nenhum dado carregado para exportação.")
-
+        if getattr(self, "has_unsaved_edits", False):
+            messagebox.showwarning(
+                "Recálculo Pendente",
+                "Existem alterações na tabela que ainda não foram recalculadas.\n\n"
+                "Por favor, clique no botão '🔄 Recalcular Ponto' antes de exportar para o Excel.",
+                parent=self
+            )
             return
 
             
@@ -3159,43 +3279,30 @@ class AppPonto(tk.Tk):
             
 
             for m in self.processed_data:
-
                 if m.data_formatada == dt_target or m.data_formatada.startswith(dt_target):
+                    if not getattr(m, "horarios_originais", None):
+                        m.horarios_originais = list(m.horarios)
+                    m.editado_manualmente = True
 
                     if aj.get("abono"):
-
                         m.is_pendencia = False
-
                         m.obs = aj.get("obs", "Abonado via IA")
-
                         count += 1
-
                     elif aj.get("horarios"):
-
                         novos_horarios = sorted(aj["horarios"])
-
                         obs = aj.get("obs", "Ajustado via IA")
-
                         m_novo = PontoEngine.process_horarios(novos_horarios, m.data_id, m.data_formatada, obs=obs)
-
                         m.segundos_trabalhados = m_novo.segundos_trabalhados
-
                         m.saldo_segundos = m_novo.saldo_segundos
-
                         m.is_pendencia = m_novo.is_pendencia
-
                         m.horarios = m_novo.horarios
-
                         m.obs = obs
-
                         count += 1
-
-
 
         if count > 0:
-
+            self.has_unsaved_edits = True
+            self.btn_recalc.config(state="normal")
             self._refresh_main_table()
-
         return count
 
 

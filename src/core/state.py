@@ -1,5 +1,5 @@
 """
-Gerenciamento de estado reativo e centralizado da aplicação com ordenação cronológica garantida e persistência.
+Gerenciamento de estado reativo e centralizado da aplicação com ordenação cronológica garantida, persistência e histórico cumulativo.
 """
 from datetime import datetime
 from typing import List, Dict, Callable, Optional, Any
@@ -72,12 +72,26 @@ class AppState:
         self.notify("marcacoes_loaded", self.marcacoes)
 
     def obter_dias_editados(self) -> List[MarcacaoDia]:
-        """Retorna todos os dias que foram alterados manualmente pelo usuário ou pela IA."""
+        """Retorna todos os dias que foram alterados manualmente pelo usuário ou pela IA na sessão atual."""
         return [m for m in self.marcacoes if m.editado_manualmente]
 
     def tem_dias_editados(self) -> bool:
         """Verifica se há dias alterados na sessão atual."""
         return any(m.editado_manualmente for m in self.marcacoes)
+
+    def salvar_edicoes_no_historico(self) -> bool:
+        """Salva as alterações do período atual no banco de histórico acumulado do usuário."""
+        if self.usuario and self.usuario.username:
+            editados = self.obter_dias_editados()
+            if editados:
+                return StorageService.salvar_edicoes_historico(self.usuario.username, editados)
+        return False
+
+    def obter_edicoes_salvas_periodo(self, start_date: str, end_date: str) -> List[MarcacaoDia]:
+        """Busca no histórico persistente do usuário se existem edições salvas para o período especificado."""
+        if self.usuario and self.usuario.username:
+            return StorageService.obter_edicoes_periodo(self.usuario.username, start_date, end_date)
+        return []
 
     def marcar_edicao_feita(self):
         """Sinaliza que uma batida foi editada e habilita o botão 'Recalcular Ponto'."""

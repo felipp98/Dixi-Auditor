@@ -143,9 +143,9 @@ class App(tk.Tk):
             msg += f"✨ Com {tot_editados} dia(s) com alterações manuais salvas.\n\n"
         else:
             msg += f"📊 Com {len(marcacoes_salvas)} dia(s) carregados.\n\n"
-        msg += "Deseja restaurar as últimas alterações salvas desta sessão?"
+        msg += "Deseja recuperar a última edição que você fez nesta sessão?"
 
-        if messagebox.askyesno("Restaurar Sessão Salva?", msg):
+        if messagebox.askyesno("Recuperar Última Edição?", msg, parent=self):
             self.app_state.data_inicio = dt_ini
             self.app_state.data_fim = dt_fim
             self.app_state.ignorar_hoje = ign_hoje
@@ -175,7 +175,7 @@ class App(tk.Tk):
         run_async_task(worker, on_success=on_success, on_error=on_error, root_widget=self)
 
     def handle_fetch_ponto(self, start_date: str, end_date: str):
-        """Busca os dados de ponto na Dixi, com diálogo inteligente de mesclagem para dias já editados."""
+        """Busca os dados de ponto na Dixi, com histórico cumulativo e diálogo inteligente de restauração."""
         def worker():
             raw_days = self.dixi_service.fetch_history(start_date, end_date)
             marcacoes_dixi: List[MarcacaoDia] = sorted(
@@ -186,7 +186,7 @@ class App(tk.Tk):
 
         def on_success(marcacoes_dixi):
             if not marcacoes_dixi:
-                messagebox.showwarning("Aviso", "Nenhum dado de ponto encontrado para o período selecionado.")
+                messagebox.showwarning("Aviso", "Nenhum dado de ponto encontrado para o período selecionado.", parent=self)
                 if isinstance(self.current_view, MainView):
                     self.current_view.finish_fetch_ponto()
                 return
@@ -195,33 +195,43 @@ class App(tk.Tk):
             self.app_state.data_inicio = f"{start_date[6:]}/{start_date[4:6]}/{start_date[:4]}" if len(start_date) == 8 else start_date
             self.app_state.data_fim = f"{end_date[6:]}/{end_date[4:6]}/{end_date[:4]}" if len(end_date) == 8 else end_date
 
-            # Verifica se há dias editados na memória atual ou no cache salvo
-            dias_editados_candidatos = self.app_state.obter_dias_editados()
-            if not dias_editados_candidatos and self.app_state.usuario and self.app_state.usuario.username:
-                cached_s = StorageService.carregar_sessao(self.app_state.usuario.username)
-                if cached_s:
-                    dias_editados_candidatos = [m for m in cached_s.get("marcacoes", []) if m.editado_manualmente]
+            # Verifica se há edições salvas no histórico acumulado para os dias do período
+            dias_salvos_periodo = self.app_state.obter_edicoes_salvas_periodo(start_date, end_date)
 
-            if dias_editados_candidatos:
-                # Checa se algum dia editado coincide com os dias retornados pela Dixi
+            # Também verifica se há dias editados na memória atual que coincidem com a nova busca
+            dias_memoria = [
+                m for m in self.app_state.obter_dias_editados()
+                if any(normalize_date_to_iso(m.data_id or m.data_formatada) == normalize_date_to_iso(d.data_id or d.data_formatada) for d in marcacoes_dixi)
+            ]
+
+            # Combina candidatos para restauração
+            candidatos_map = {
+                normalize_date_to_iso(m.data_id or m.data_formatada): m
+                for m in (dias_salvos_periodo + dias_memoria)
+            }
+            dias_candidatos = list(candidatos_map.values())
+
+            if dias_candidatos:
+                # Checa sobreposição exata com o retorno da Dixi
                 dias_sobrepostos = [
-                    m for m in dias_editados_candidatos
+                    m for m in dias_candidatos
                     if any(normalize_date_to_iso(m.data_id or m.data_formatada) == normalize_date_to_iso(d.data_id or d.data_formatada) for d in marcacoes_dixi)
                 ]
 
                 if dias_sobrepostos:
-                    manter = messagebox.askyesno(
-                        "Manter Alterações Realizadas?",
-                        f"Foram encontradas alterações manuais em {len(dias_sobrepostos)} dia(s) do período selecionado.\n\n"
-                        "Deseja MANTER essas alterações nos dias editados e carregar os novos dias da Dixi?\n\n"
-                        "• Sim: Preserva seus horários e observações editados.\n"
-                        "• Não: Descarta as edições e recarrega os dados originais da Dixi."
+                    recuperar = messagebox.askyesno(
+                        "Restaurar Histórico de Edições?",
+                        f"Encontramos {len(dias_sobrepostos)} dia(s) com alterações salvas no seu histórico para o período selecionado.\n\n"
+                        "Deseja RESTAURAR essas edições sobre os dados da Dixi?\n\n"
+                        "• Sim: Restaura seus horários e observações editados anteriormente.\n"
+                        "• Não: Carrega os dados originais limpos da Dixi.",
+                        parent=self
                     )
 
-                    if manter:
-                        marcacoes_finais, pres_count = StorageService.mesclar_marcacoes(dias_editados_candidatos, marcacoes_dixi)
+                    if recuperar:
+                        marcacoes_finais, pres_count = StorageService.mesclar_marcacoes(dias_sobrepostos, marcacoes_dixi)
                         self.app_state.set_marcacoes(marcacoes_finais)
-                        messagebox.showinfo("Dados Mesclados", f"{pres_count} dia(s) com alterações manuais foram mantidos e os demais foram atualizados da Dixi.")
+                        messagebox.showinfo("Histórico Restaurado", f"{pres_count} dia(s) editados foram restaurados com sucesso!", parent=self)
                     else:
                         self.app_state.set_marcacoes(marcacoes_dixi)
                 else:
@@ -234,7 +244,7 @@ class App(tk.Tk):
 
         def on_error(err):
             logger.error(f"Erro ao buscar histórico de ponto: {err}")
-            messagebox.showerror("Erro de Conexão", f"Falha ao obter histórico de ponto:\n{err}")
+            messagebox.showerror("Erro de Conexão", f"Falha ao obter histórico de ponto:\n{err}", parent=self)
             if isinstance(self.current_view, MainView):
                 self.current_view.finish_fetch_ponto()
 

@@ -1,58 +1,98 @@
-# Python bytecode / cache
+# ==============================================================================
+# Python Bytecode & Cache
+# ==============================================================================
 __pycache__/
-*.pyc
-*.pyo
-*.pyd
+*.py[cod]
+*$py.class
 .pytest_cache/
+.coverage
+htmlcov/
 
-# PyInstaller / Build outputs
+# ==============================================================================
+# PyInstaller & Build Outputs
+# ==============================================================================
 build/
 dist/
 **/build/
 **/dist/
 *.zip
+*.tar.gz
 *.db
+*.sqlite3
 *.exe
+*.bin
 
-# Dados sensíveis e cadastros locais (Não subir para o GitHub)
+# ==============================================================================
+# Dados Sensíveis, Tokens & Configurações Locais
+# ==============================================================================
+.autentique/
+*.autentique/
 colaboradores.json
 src/config/colaboradores.json
 *.cache.json
 cache_*.json
-.autentique/
+*.token
+*.key
+*.pem
 
-# Temporary & Scratch files
+# Ambientes virtuais e variáveis de ambiente
+.venv/
+venv/
+env/
+ENV/
+.env
+.env.*
+!.env.example
+
+# ==============================================================================
+# Documentos, Apresentações & Coleções de API
+# ==============================================================================
+*.pdf
+*.pptx
+*.ppt
+*.docx
+*.doc
+*.postman_collection.json
+*.postman_environment.json
+
+# ==============================================================================
+# Arquivos de Teste Visual & Temporários
+# ==============================================================================
+TesteHTML/
 scratch_*.py
 temp_*.py
 *.tmp
 *.log
 dixi_auditor.log
 
-# Generated application files (Excel outputs and exports)
+# Planilhas e relatórios gerados
 *.xlsx
+*.xls
+*.csv
 
-# Operating System Files
+# ==============================================================================
+# Arquivos de Sistema Operacional
+# ==============================================================================
 Thumbs.db
 ehthumbs.db
 Desktop.ini
 .DS_Store
+*.stackdump
 
-# Environments
-.venv/
-venv/
-env/
-ENV/
-.env
-
-# Images (Allow project assets)
+# ==============================================================================
+# Imagens e Mídia (permite apenas a pasta assets)
+# ==============================================================================
 *.ico
 *.png
-!assets/**/*.ico
-!assets/**/*.png
-!assets/**/*.svg
-!assets/**/*.jpg
+*.jpg
+*.jpeg
+*.svg
+*.gif
+!assets/**/*
 
-# IDEs and editors
+# ==============================================================================
+# IDEs & Editores
+# ==============================================================================
 .idea/
 .vscode/
 *.suo
@@ -60,3 +100,4 @@ ENV/
 *.njsproj
 *.sln
 *.swp
+*.swo
